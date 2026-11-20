@@ -7,7 +7,6 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,10 +28,12 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
@@ -47,16 +48,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class LocalSong(val id: Long, val title: String, val artist: String, val uri: Uri)
 
 class MainActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
     private var songs by mutableStateOf(listOf<LocalSong>())
-    private var currentSong by mutableStateOf<LocalSong?>(null)
+    private var onlineSongs by mutableStateOf(listOf<OnlineSong>())
+    private var currentSongTitle by mutableStateOf<String?>(null)
+    private var currentSongArtist by mutableStateOf<String?>(null)
     private var isPlaying by mutableStateOf(false)
+    private var searchQuery by mutableStateOf("")
+    private var isSearching by mutableStateOf(false)
+    private var searchError by mutableStateOf<String?>(null)
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -66,15 +77,28 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         player = ExoPlayer.Builder(this).build()
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+        })
         requestAudioPermission()
         setContent {
             MaterialTheme {
                 SoundOfSoulsScreen(
                     songs = songs,
-                    currentSong = currentSong,
+                    onlineSongs = onlineSongs,
+                    currentSongTitle = currentSongTitle,
+                    currentSongArtist = currentSongArtist,
                     isPlaying = isPlaying,
+                    searchQuery = searchQuery,
+                    isSearching = isSearching,
+                    searchError = searchError,
+                    onSearchQueryChange = { searchQuery = it },
+                    onSearch = { searchOnlineMusic() },
                     onRefresh = { requestAudioPermission() },
-                    onSongClick = { playSong(it) },
+                    onSongClick = { playLocalSong(it) },
+                    onOnlineSongClick = { playOnlineSong(it) },
                     onPlayPause = { togglePlayback() }
                 )
             }
@@ -119,29 +143,55 @@ class MainActivity : ComponentActivity() {
         songs = found
     }
 
-    private fun playSong(song: LocalSong) {
-        currentSong = song
-        player.setMediaItem(MediaItem.fromUri(song.uri))
-        player.prepare()
-        player.play()
-        isPlaying = true
-    }
-
-    private fun togglePlayback() {
-        if (currentSong == null && songs.isNotEmpty()) {
-            playSong(songs.first())
-        } else if (player.isPlaying) {
-            player.pause()
-            isPlaying = false
-        } else {
-            player.play()
-            isPlaying = true
+    private fun searchOnlineMusic() {
+        val query = searchQuery.trim()
+        if (query.isEmpty()) {
+            searchError = "Enter a song, artist, or genre to search."
+            return
+        }
+        lifecycleScope.launch {
+            isSearching = true
+            searchError = null
+            try {
+                val results = withContext(Dispatchers.IO) {
+                    InternetArchiveMusic.search(query)
+                }
+                onlineSongs = results
+                if (results.isEmpty()) {
+                    searchError = "No playable tracks with a verified open licence were found. Try another search."
+                }
+            } catch (error: Exception) {
+                searchError = "Could not load music. Check your internet connection and try again."
+            } finally {
+                isSearching = false
+            }
         }
     }
 
-    override fun onStop() {
-        super.onStop()
-        // Playback lifecycle will be moved to a media service in the next milestone.
+    private fun playLocalSong(song: LocalSong) {
+        currentSongTitle = song.title
+        currentSongArtist = song.artist
+        player.setMediaItem(MediaItem.fromUri(song.uri))
+        player.prepare()
+        player.play()
+    }
+
+    private fun playOnlineSong(song: OnlineSong) {
+        currentSongTitle = song.title
+        currentSongArtist = song.artist
+        player.setMediaItem(MediaItem.fromUri(song.streamUrl))
+        player.prepare()
+        player.play()
+    }
+
+    private fun togglePlayback() {
+        if (player.mediaItemCount == 0 && songs.isNotEmpty()) {
+            playLocalSong(songs.first())
+        } else if (player.isPlaying) {
+            player.pause()
+        } else {
+            player.play()
+        }
     }
 
     override fun onDestroy() {
@@ -153,10 +203,18 @@ class MainActivity : ComponentActivity() {
 @androidx.compose.runtime.Composable
 private fun SoundOfSoulsScreen(
     songs: List<LocalSong>,
-    currentSong: LocalSong?,
+    onlineSongs: List<OnlineSong>,
+    currentSongTitle: String?,
+    currentSongArtist: String?,
     isPlaying: Boolean,
+    searchQuery: String,
+    isSearching: Boolean,
+    searchError: String?,
+    onSearchQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
     onRefresh: () -> Unit,
     onSongClick: (LocalSong) -> Unit,
+    onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit
 ) {
     val background = Color(0xFF090711)
@@ -166,7 +224,7 @@ private fun SoundOfSoulsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color(0xFF21133D), background)))
-                .padding(20.dp)
+                .padding(horizontal = 18.dp, vertical = 16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -177,58 +235,107 @@ private fun SoundOfSoulsScreen(
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh music", tint = Color.White)
                 }
             }
-            Spacer(Modifier.size(28.dp))
-            Text("Your library", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text("${songs.size} songs on this device", color = Color.LightGray, fontSize = 13.sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
-            if (songs.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = purple, modifier = Modifier.size(54.dp))
-                    Text("No music found yet", color = Color.White, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 12.dp))
-                    Text("Add audio files to your phone, then tap refresh.", color = Color.LightGray,
-                        fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.size(18.dp))
+            Text("Discover music", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text("Search free-to-stream music", color = Color.LightGray, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    placeholder = { Text("Song, artist or genre") }
+                )
+                IconButton(onClick = onSearch, enabled = !isSearching) {
+                    Icon(Icons.Default.Search, contentDescription = "Search songs", tint = Color.White)
                 }
-            } else {
-                LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(songs, key = { it.id }) { song ->
+            }
+            if (isSearching) {
+                Text("Searching music catalogue…", color = Color(0xFFD0C2F5), fontSize = 13.sp,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+            if (searchError != null) {
+                Text(searchError, color = Color(0xFFFFC1C1), fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 6.dp))
+            }
+            if (onlineSongs.isNotEmpty()) {
+                Text("ONLINE RESULTS", color = Color(0xFFBDA5FF), fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
+            }
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(onlineSongs, key = { it.identifier + it.streamUrl }) { song ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .background(Color(0xFF211D30), RoundedCornerShape(14.dp))
+                            .clickable { onOnlineSongClick(song) }
+                            .padding(13.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.MusicNote, contentDescription = null, tint = purple)
+                        Column(modifier = Modifier.weight(1f).padding(start = 11.dp)) {
+                            Text(song.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text(song.artist, color = Color.LightGray, fontSize = 12.sp, maxLines = 1)
+                            Text("Open-licensed • Internet Archive", color = Color(0xFFBDA5FF), fontSize = 10.sp)
+                        }
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Play ${song.title}", tint = Color.White)
+                    }
+                }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Your library", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                            Text("${songs.size} songs on this device", color = Color.LightGray, fontSize = 12.sp)
+                        }
+                        IconButton(onClick = onRefresh) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh library", tint = Color.White)
+                        }
+                    }
+                }
+                if (songs.isEmpty()) {
+                    item {
+                        Text("No local music found. Import audio files or search online above.",
+                            color = Color.LightGray, fontSize = 13.sp, modifier = Modifier.padding(vertical = 18.dp))
+                    }
+                } else {
+                    items(songs, key = { "local-${it.id}" }) { song ->
                         Row(
                             modifier = Modifier.fillMaxWidth()
-                                .background(Color(0xFF211D30), RoundedCornerShape(16.dp))
+                                .background(Color(0xFF211D30), RoundedCornerShape(14.dp))
                                 .clickable { onSongClick(song) }
-                                .padding(14.dp),
+                                .padding(13.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(Icons.Default.MusicNote, contentDescription = null, tint = purple)
-                            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                            Column(modifier = Modifier.weight(1f).padding(start = 11.dp)) {
                                 Text(song.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
                                 Text(song.artist, color = Color.LightGray, fontSize = 12.sp, maxLines = 1)
                             }
-                            if (currentSong?.id == song.id) {
-                                Text("PLAYING", color = purple, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            }
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Play ${song.title}", tint = Color.White)
                         }
                     }
                 }
             }
-            if (currentSong != null) {
+            if (currentSongTitle != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth()
                         .background(Color(0xFF30204D), RoundedCornerShape(18.dp))
-                        .padding(14.dp),
+                        .padding(13.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(currentSong.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-                        Text(currentSong.artist, color = Color(0xFFD0C2F5), fontSize = 12.sp, maxLines = 1)
+                        Text(currentSongTitle ?: "", color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(currentSongArtist ?: "", color = Color(0xFFD0C2F5), fontSize = 12.sp, maxLines = 1)
                     }
-                    Button(onClick = onPlayPause) {
+                    IconButton(onClick = onPlayPause) {
                         Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play")
+                            contentDescription = if (isPlaying) "Pause" else "Play", tint = Color.White)
                     }
                 }
             }

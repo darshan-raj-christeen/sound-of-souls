@@ -20,9 +20,16 @@ object InternetArchiveMusic {
     )
 
     fun search(query: String): List<OnlineSong> {
-        val safeQuery = query.trim().replace("\\", " ").replace("\"", " ")
-        val archiveQuery = "mediatype:audio AND (licenseurl:http*by* OR licenseurl:http*zero* OR licenseurl:http*publicdomain*) AND \"$safeQuery\""
-        val searchUrl = "https://archive.org/advancedsearch.php?q=${enc(archiveQuery)}&fl[]=identifier&fl[]=title&fl[]=creator&rows=18&page=1&output=json"
+        val terms = query.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(6)
+        if (terms.isEmpty()) return emptyList()
+        fun lucene(value: String) = value.replace(Regex("[^\\p{L}\\p{N}_-]"), "")
+        val clauses = terms.mapNotNull { raw ->
+            val term = lucene(raw)
+            if (term.isBlank()) null else "(title:$term OR creator:$term OR subject:$term)"
+        }
+        if (clauses.isEmpty()) return emptyList()
+        val archiveQuery = "mediatype:audio AND (" + clauses.joinToString(" OR ") + ")"
+        val searchUrl = "https://archive.org/advancedsearch.php?q=${enc(archiveQuery)}&fl[]=identifier&fl[]=title&fl[]=creator&rows=40&page=1&output=json"
         val response = getJson(searchUrl)
         val docs = response.getJSONObject("response").getJSONArray("docs")
         val results = mutableListOf<OnlineSong>()

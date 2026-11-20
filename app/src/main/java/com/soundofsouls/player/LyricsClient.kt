@@ -14,41 +14,73 @@ data class LyricsResult(
 )
 
 object LyricsClient {
+    private fun normalize(value: String): String =
+        value.lowercase()
+            .replace(Regex("\\([^)]*\\)|\\[[^]]*]"), " ")
+            .replace(Regex("\\b(feat|ft|featuring)\\b.*$"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
+
     fun find(track: String, artist: String): LyricsResult? {
-        val query = URLEncoder.encode("$track $artist", Charsets.UTF_8.name())
-        val connection = (URL("https://lrclib.net/api/search?q=$query").openConnection() as HttpURLConnection)
-        connection.connectTimeout = 10000
-        connection.readTimeout = 12000
-        connection.setRequestProperty("User-Agent", "SoundOfSouls/0.2 (https://github.com/darshan-raj-christeen/sound-of-souls)")
-        return try {
-            if (connection.responseCode !in 200..299) return null
-            val json = connection.inputStream.bufferedReader().use { JSONArray(it.readText()) }
-            var best: JSONObject? = null
-            val wantedTrack = track.trim().lowercase()
-            val wantedArtist = artist.trim().lowercase()
-            for (i in 0 until json.length()) {
-                val candidate = json.optJSONObject(i) ?: continue
-                val candidateTrack = candidate.optString("trackName").lowercase()
-                val candidateArtist = candidate.optString("artistName").lowercase()
-                if (candidateTrack == wantedTrack && (wantedArtist.isBlank() ||
-                    candidateArtist == wantedArtist || candidateArtist.contains(wantedArtist) ||
-                    wantedArtist.contains(candidateArtist))) {
-                    best = candidate
-                    if (candidate.optString("syncedLyrics").isNotBlank()) break
+        val cleanTrack = track.trim()
+        if (cleanTrack.isBlank()) return null
+        val queries = listOf(
+            "$cleanTrack $artist".trim(),
+            cleanTrack
+        ).distinct()
+        val results = linkedMapOf<String, JSONObject>()
+
+        for (queryText in queries) {
+            val query = URLEncoder.encode(queryText, Charsets.UTF_8.name())
+            val connection = URL("https://lrclib.net/api/search?q=$query")
+                .openConnection() as HttpURLConnection
+            connection.connectTimeout = 6500
+            connection.readTimeout = 8500
+            connection.setRequestProperty("User-Agent", "SoundOfSouls/0.3 (Android lyrics lookup)")
+            try {
+                if (connection.responseCode !in 200..299) continue
+                val json = connection.inputStream.bufferedReader().use { JSONArray(it.readText()) }
+                for (i in 0 until json.length()) {
+                    val candidate = json.optJSONObject(i) ?: continue
+                    val id = candidate.optString("id").ifBlank {
+                        candidate.optString("trackName") + candidate.optString("artistName")
+                    }
+                    results[id] = candidate
                 }
+            } finally {
+                connection.disconnect()
             }
-            val chosen = best ?: return null
-            val synced = chosen.optString("syncedLyrics")
-            val plain = chosen.optString("plainLyrics")
-            if (synced.isBlank() && plain.isBlank()) return null
-            LyricsResult(
-                chosen.optString("trackName", track),
-                chosen.optString("artistName", artist),
-                plain,
-                synced
-            )
-        } finally {
-            connection.disconnect()
+            if (results.values.any { normalize(it.optString("trackName")) == normalize(cleanTrack) }) break
         }
+
+        val wantedTrack = normalize(cleanTrack)
+        val wantedArtist = normalize(artist)
+        val best = results.values.mapNotNull { candidate ->
+            val candidateTrack = normalize(candidate.optString("trackName"))
+            val candidateArtist = normalize(candidate.optString("artistName"))
+            if (candidateTrack.isBlank()) return@mapNotNull null
+            val trackExact = candidateTrack == wantedTrack
+            val trackClose = trackExact || candidateTrack.contains(wantedTrack) ||
+                wantedTrack.contains(candidateTrack)
+            val artistClose = wantedArtist.isBlank() || candidateArtist == wantedArtist ||
+                candidateArtist.contains(wantedArtist) || wantedArtist.contains(candidateArtist)
+            if (!trackClose || !artistClose) return@mapNotNull null
+            val score = (if (trackExact) 100 else 60) +
+                (if (artistClose && wantedArtist.isNotBlank()) 30 else 0) +
+                (if (candidate.optString("syncedLyrics").isNotBlank()) 5 else 0) +
+                (if (candidate.optString("plainLyrics").isNotBlank()) 2 else 0)
+            score to candidate
+        }.maxByOrNull { it.first }?.second ?: return null
+
+        val synced = best.optString("syncedLyrics")
+        val plain = best.optString("plainLyrics")
+        if (synced.isBlank() && plain.isBlank()) return null
+        return LyricsResult(
+            best.optString("trackName", cleanTrack),
+            best.optString("artistName", artist),
+            plain,
+            synced
+        )
     }
 }

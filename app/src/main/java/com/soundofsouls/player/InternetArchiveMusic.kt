@@ -22,7 +22,7 @@ object InternetArchiveMusic {
         "creativecommons\\.org/licenses/(by|by-sa)/(2\\.0|3\\.0|4\\.0)/|creativecommons\\.org/publicdomain/zero/|creativecommons\\.org/publicdomain/mark/"
     )
 
-    fun search(query: String): List<OnlineSong> {
+    fun search(query: String, preferHighQuality: Boolean = false): List<OnlineSong> {
         val cleaned = query.trim().replace(Regex("\\s+"), " ")
         if (cleaned.isBlank()) return emptyList()
         val terms = cleaned.split(" ").filter { it.isNotBlank() }.take(5)
@@ -53,7 +53,7 @@ object InternetArchiveMusic {
 
         val pool = Executors.newFixedThreadPool(5)
         return try {
-            pool.invokeAll(docsById.values.take(24).map { doc -> Callable { readPlayableItem(doc) } })
+            pool.invokeAll(docsById.values.take(24).map { doc -> Callable { readPlayableItem(doc, preferHighQuality) } })
                 .mapNotNull { future -> try { future.get() } catch (_: Exception) { null } }
                 .sortedBy { song ->
                     val title = song.title.lowercase()
@@ -70,7 +70,7 @@ object InternetArchiveMusic {
         }
     }
 
-    private fun readPlayableItem(doc: JSONObject): OnlineSong? {
+    private fun readPlayableItem(doc: JSONObject, preferHighQuality: Boolean): OnlineSong? {
         val identifier = doc.optString("identifier")
         if (identifier.isBlank()) return null
         val item = getJson("https://archive.org/metadata/${enc(identifier)}")
@@ -86,7 +86,14 @@ object InternetArchiveMusic {
             val file = files.optJSONObject(j) ?: continue
             val name = file.optString("name")
             val lower = name.lowercase()
-            val score = when {
+            val score = if (preferHighQuality) when {
+                lower.endsWith(".flac") -> 6
+                lower.endsWith(".wav") -> 5
+                lower.endsWith(".m4a") || lower.endsWith(".aac") -> 4
+                lower.endsWith(".ogg") -> 3
+                lower.endsWith(".mp3") -> 2
+                else -> -1
+            } else when {
                 lower.endsWith(".mp3") -> 5
                 lower.endsWith(".m4a") || lower.endsWith(".aac") -> 4
                 lower.endsWith(".ogg") -> 3

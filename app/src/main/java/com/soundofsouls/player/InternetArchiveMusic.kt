@@ -1,6 +1,7 @@
 package com.soundofsouls.player
 
 import android.net.Uri
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -22,8 +23,9 @@ object InternetArchiveMusic {
     )
 
     fun search(query: String): List<OnlineSong> {
-        val terms = query.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(5)
-        if (terms.isEmpty()) return emptyList()
+        val cleaned = query.trim().replace(Regex("\\s+"), " ")
+        if (cleaned.isBlank()) return emptyList()
+        val terms = cleaned.split(" ").filter { it.isNotBlank() }.take(5)
         fun lucene(value: String) = value.replace(Regex("[^\\p{L}\\p{N}_-]"), "")
         val clauses = terms.mapNotNull { raw ->
             val term = lucene(raw)
@@ -31,25 +33,38 @@ object InternetArchiveMusic {
         }
         if (clauses.isEmpty()) return emptyList()
 
-        // Ask the catalogue to filter by audio and licence before downloading item metadata.
-        val archiveQuery = "mediatype:audio AND (" + clauses.joinToString(" OR ") + ")"
-        val searchUrl = "https://archive.org/advancedsearch.php?q=${enc(archiveQuery)}&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&rows=14&page=1&output=json"
-        val docs = getJson(searchUrl).getJSONObject("response").getJSONArray("docs")
-        val candidates = (0 until docs.length()).map { docs.getJSONObject(it) }
-            .filter { doc ->
-                val license = doc.optString("licenseurl")
-                license.isBlank() || allowedLicense.containsMatchIn(license)
-            }.take(10)
+        // Search exact title phrase first, then broader individual words so a common
+        // word such as "song" cannot bury a distinctive title such as "Radhima".
+        val queries = listOf(
+            "mediatype:audio AND title:\"$cleaned\"",
+            "mediatype:audio AND (" + clauses.joinToString(" OR ") + ")"
+        ).distinct()
+        val docsById = linkedMapOf<String, JSONObject>()
+        for (archiveQuery in queries) {
+            val url = "https://archive.org/advancedsearch.php?q=${enc(archiveQuery)}&fl[]=identifier&fl[]=title&fl[]=creator&rows=30&page=1&output=json"
+            val docs = getJson(url).optJSONObject("response")?.optJSONArray("docs") ?: JSONArray()
+            for (i in 0 until docs.length()) {
+                val doc = docs.optJSONObject(i) ?: continue
+                val id = doc.optString("identifier")
+                if (id.isNotBlank()) docsById.putIfAbsent(id, doc)
+            }
+            if (docsById.size >= 30) break
+        }
 
-        // Fetch a small number of item records concurrently instead of making 40 serial requests.
         val pool = Executors.newFixedThreadPool(5)
         return try {
-            val tasks = candidates.map { doc ->
-                Callable { readPlayableItem(doc) }
-            }
-            pool.invokeAll(tasks).mapNotNull { future ->
-                try { future.get() } catch (_: Exception) { null }
-            }
+            pool.invokeAll(docsById.values.take(24).map { doc -> Callable { readPlayableItem(doc) } })
+                .mapNotNull { future -> try { future.get() } catch (_: Exception) { null } }
+                .sortedBy { song ->
+                    val title = song.title.lowercase()
+                    val needle = cleaned.lowercase()
+                    when {
+                        title == needle -> 0
+                        title.contains(needle) -> 1
+                        terms.any { title.contains(it.lowercase()) } -> 2
+                        else -> 3
+                    }
+                }
         } finally {
             pool.shutdownNow()
         }
@@ -61,6 +76,7 @@ object InternetArchiveMusic {
         val item = getJson("https://archive.org/metadata/${enc(identifier)}")
         val metadata = item.optJSONObject("metadata") ?: return null
         val license = metadata.optString("licenseurl").ifBlank { doc.optString("licenseurl") }
+        // Only stream tracks whose item metadata explicitly identifies a reusable licence.
         if (!allowedLicense.containsMatchIn(license)) return null
 
         val files = item.optJSONArray("files") ?: return null
@@ -70,7 +86,7 @@ object InternetArchiveMusic {
             val file = files.optJSONObject(j) ?: continue
             val name = file.optString("name")
             val lower = name.lowercase()
-            val extScore = when {
+            val score = when {
                 lower.endsWith(".mp3") -> 5
                 lower.endsWith(".m4a") || lower.endsWith(".aac") -> 4
                 lower.endsWith(".ogg") -> 3
@@ -78,18 +94,18 @@ object InternetArchiveMusic {
                 lower.endsWith(".wav") -> 1
                 else -> -1
             }
-            if (extScore > audioScore && file.optString("source") != "metadata") {
-                audioScore = extScore
+            if (score > audioScore && file.optString("source") != "metadata") {
+                audioScore = score
                 audioName = name
             }
         }
         val fileName = audioName ?: return null
         val title = metadata.optString("title").ifBlank { doc.optString("title") }
             .ifBlank { fileName.substringAfterLast('/') }
-        val creatorValue = metadata.opt("creator") ?: doc.opt("creator")
-        val artist = when (creatorValue) {
-            is org.json.JSONArray -> creatorValue.optString(0, "Unknown artist")
-            is String -> creatorValue
+        val creator = metadata.opt("creator") ?: doc.opt("creator")
+        val artist = when (creator) {
+            is JSONArray -> creator.optString(0, "Unknown artist")
+            is String -> creator
             else -> "Unknown artist"
         }
         val streamUrl = "https://archive.org/download/${enc(identifier)}/${Uri.encode(fileName)}"
@@ -99,9 +115,9 @@ object InternetArchiveMusic {
     private fun getJson(address: String): JSONObject {
         val connection = URL(address).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
-        connection.connectTimeout = 7000
-        connection.readTimeout = 9000
-        connection.setRequestProperty("User-Agent", "SoundOfSouls/0.3 (Android music discovery)")
+        connection.connectTimeout = 8000
+        connection.readTimeout = 12000
+        connection.setRequestProperty("User-Agent", "SoundOfSouls/0.4 (Android music discovery)")
         return try {
             if (connection.responseCode !in 200..299) {
                 throw IllegalStateException("Catalogue returned HTTP ${connection.responseCode}")

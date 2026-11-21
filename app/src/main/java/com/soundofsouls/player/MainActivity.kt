@@ -29,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -363,7 +364,12 @@ private fun SoundOfSoulsScreen(
         Surface(Modifier.fillMaxSize(), color = bg) {
             Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_launcher_logo),
+                        contentDescription = "Sound of Souls channel logo",
+                        modifier = Modifier.size(46.dp)
+                    )
+                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
                         Text("SOUND OF SOULS", color = primaryText, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
                         Text("YOUR MUSIC. YOUR WORLD.", color = accent, fontSize = 10.sp, letterSpacing = 2.sp)
                     }

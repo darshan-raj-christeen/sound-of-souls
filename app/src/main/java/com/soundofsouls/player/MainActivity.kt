@@ -289,6 +289,7 @@ private fun SoundOfSoulsScreen(
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
     playbackPosition: Long, playbackDuration: Long,
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
+    onOpenOfficialSearch: () -> Unit,
     onThemeToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,

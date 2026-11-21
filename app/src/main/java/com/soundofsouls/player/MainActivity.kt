@@ -34,6 +34,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
     private var currentSongArtist by mutableStateOf<String?>(null)
     private var currentSongIsOnline by mutableStateOf(false)
     private var isPlaying by mutableStateOf(false)
+    private var playbackError by mutableStateOf<String?>(null)
     private var searchQuery by mutableStateOf("")
     private var isSearching by mutableStateOf(false)
     private var searchError by mutableStateOf<String?>(null)
@@ -79,6 +81,10 @@ class MainActivity : ComponentActivity() {
             override fun onPlaybackStateChanged(state: Int) {
                 playbackDuration = player.duration.takeIf { it > 0 } ?: 0L
             }
+            override fun onPlayerError(error: PlaybackException) {
+                isPlaying = false
+                playbackError = "This stream could not be played. The source may block streaming or the file may be unavailable."
+            }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 playbackPosition = 0L
                 playbackDuration = player.duration.takeIf { it > 0 } ?: 0L
@@ -90,7 +96,7 @@ class MainActivity : ComponentActivity() {
             SoundOfSoulsScreen(
                 songs = songs, onlineSongs = onlineSongs,
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
-                isPlaying = isPlaying, searchQuery = searchQuery,
+                isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
                 isSearching = isSearching, searchError = searchError,
                 darkMode = darkMode, selectedTab = selectedTab,
                 showLyrics = showLyrics, lyricsText = lyricsText,
@@ -180,12 +186,14 @@ class MainActivity : ComponentActivity() {
 
     private fun playLocalSong(song: LocalSong) {
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = false
+        playbackError = null
         lyricsText = null; syncedLyrics = ""; lyricsError = null
         player.setMediaItem(MediaItem.fromUri(song.uri)); player.prepare(); player.play()
     }
 
     private fun playOnlineSong(song: OnlineSong) {
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = true
+        playbackError = null
         lyricsText = null; syncedLyrics = ""; lyricsError = null
         player.setMediaItem(MediaItem.fromUri(song.streamUrl)); player.prepare(); player.play()
     }
@@ -238,7 +246,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SoundOfSoulsScreen(
     songs: List<LocalSong>, onlineSongs: List<OnlineSong>,
-    currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean,
+    currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, showLyrics: Boolean,
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
@@ -340,6 +348,50 @@ private fun SoundOfSoulsScreen(
                             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                                 Text(currentSongTitle, color = primaryText, fontWeight = FontWeight.Bold, maxLines = 1)
                                 Text(currentSongArtist ?: "", color = secondaryText, fontSize = 12.sp, maxLines = 1)
+                            }
+                            IconButton(onClick = onLyricsClick) { Icon(Icons.Default.Lyrics, "Show lyrics", tint = accent) }
+                        }
+                        if (playbackError != null) {
+                            Text(playbackError, color = Color(0xFFE57373), fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                        }
+                        /* PLAYER_CONTROLS_START */
+                        Slider(value = if (playbackDuration > 0) playbackPosition.coerceIn(0, playbackDuration).toFloat() else 0f,
+                            onValueChange = { onSeek(it.toLong()) },
+                            valueRange = 0f..(playbackDuration.coerceAtLeast(1L).toFloat()))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(fmt(playbackPosition), color = secondaryText, fontSize = 10.sp)
+                            Text(fmt(playbackDuration), color = secondaryText, fontSize = 10.sp)
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onPrevious) { Icon(Icons.Default.SkipPrevious, "Previous", tint = primaryText) }
+                            IconButton(onClick = onPlayPause) {
+                                Icon(if (isPlaying) Icons.Default.PauseCircleFilled else Icons.Default.PlayCircleFilled,
+                                    if (isPlaying) "Pause" else "Play", tint = accent, modifier = Modifier.size(42.dp))
+                            }
+                            IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, "Next", tint = primaryText) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SongRow(title: String, artist: String, subtitle: String, panel: Color,
+    primary: Color, secondary: Color, accent: Color, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(panel, RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(13.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.MusicNote, null, tint = accent, modifier = Modifier.size(30.dp))
+        Column(Modifier.weight(1f).padding(start = 11.dp)) {
+            Text(title, color = primary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(artist, color = secondary, fontSize = 12.sp, maxLines = 1)
+            Text(subtitle, color = accent, fontSize = 10.sp)
+        }
+        Icon(Icons.Default.PlayArrow, "Play $title", tint = primary)
+    }
+}
                             }
                             IconButton(onClick = onLyricsClick) { Icon(Icons.Default.Lyrics, "Show lyrics", tint = accent) }
                         }

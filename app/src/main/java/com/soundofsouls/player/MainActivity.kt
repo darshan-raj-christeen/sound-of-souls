@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
     private var lyricsError by mutableStateOf<String?>(null)
     private var showLyrics by mutableStateOf(false)
     private var darkMode by mutableStateOf(true)
+    private var highQualityAudio by mutableStateOf(false)
     private var selectedTab by mutableStateOf(AppTab.ONLINE)
     private var playbackPosition by mutableStateOf(0L)
     private var playbackDuration by mutableStateOf(0L)
@@ -103,7 +104,7 @@ class MainActivity : ComponentActivity() {
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
                 isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
                 isSearching = isSearching, searchError = searchError,
-                darkMode = darkMode, selectedTab = selectedTab,
+                darkMode = darkMode, selectedTab = selectedTab, highQualityAudio = highQualityAudio,
                 showLyrics = showLyrics, lyricsText = lyricsText,
                 syncedLyrics = syncedLyrics, lyricsLoading = lyricsLoading,
                 lyricsError = lyricsError, playbackPosition = playbackPosition,
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
                 onOpenOfficialSearch = { openOfficialMusicSearch() },
                 onOpenMyYouTubeSong = { openMyYouTubeSong() },
                 onThemeToggle = { darkMode = !darkMode },
+                onQualityToggle = { highQualityAudio = !highQualityAudio; if (searchQuery.isNotBlank()) searchOnlineMusic() },
                 onDolbyAtmosClick = { openDolbyAtmosSettings() },
                 onTabChange = { selectedTab = it },
                 onSongClick = { playLocalSong(it) },
@@ -221,7 +223,7 @@ class MainActivity : ComponentActivity() {
             isSearching = true
             searchError = null
             try {
-                val results = withContext(Dispatchers.IO) { InternetArchiveMusic.search(query) }
+                val results = withContext(Dispatchers.IO) { InternetArchiveMusic.search(query, highQualityAudio) }
                 onlineSongs = results
                 if (results.isEmpty()) searchError = "No open-licensed tracks found for “$query”. Try a different spelling or broader search."
             } catch (e: Exception) {
@@ -340,12 +342,12 @@ private fun SoundOfSoulsScreen(
     songs: List<LocalSong>, onlineSongs: List<OnlineSong>,
     currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
-    darkMode: Boolean, selectedTab: AppTab, showLyrics: Boolean,
+    darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
     playbackPosition: Long, playbackDuration: Long,
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
     onOpenOfficialSearch: () -> Unit, onOpenMyYouTubeSong: () -> Unit,
-    onThemeToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
+    onThemeToggle: () -> Unit, onQualityToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
     onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
@@ -376,6 +378,9 @@ private fun SoundOfSoulsScreen(
                     IconButton(onClick = onThemeToggle) {
                         Icon(if (darkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = "Switch theme", tint = primaryText)
+                    }
+                    IconButton(onClick = onQualityToggle) {
+                        Icon(Icons.Default.HighQuality, contentDescription = if (highQualityAudio) "High quality audio enabled" else "Enable high quality audio", tint = if (highQualityAudio) Color(0xFFD8FF00) else primaryText)
                     }
                     IconButton(onClick = onDolbyAtmosClick) {
                         Icon(Icons.Default.GraphicEq, contentDescription = "Dolby Atmos settings", tint = accent)
@@ -451,13 +456,13 @@ private fun SoundOfSoulsScreen(
                                     tint = Color(0xFFD8FF00), modifier = Modifier.size(38.dp))
                                 Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                                     Text("My YouTube song", color = primaryText, fontWeight = FontWeight.Bold)
-                                    Text("Sound of Souls • Official channel video", color = secondaryText, fontSize = 11.sp)
+                                    Text("Your official YouTube upload • plays on YouTube", color = secondaryText, fontSize = 11.sp)
                                 }
                                 Button(onClick = onOpenMyYouTubeSong) { Text("Play") }
                             }
                         }
                         Text("Find your next favourite", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                        Text("Search open-licensed music you can stream", color = secondaryText, fontSize = 13.sp,
+                        Text(if (highQualityAudio) "High quality preference: lossless files first when available" else "Search open-licensed music you can stream", color = secondaryText, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
                         OutlinedTextField(
                             value = searchQuery, onValueChange = onSearchQueryChange,

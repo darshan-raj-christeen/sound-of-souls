@@ -52,6 +52,7 @@ private enum class AppTab { ONLINE, LIBRARY }
 class MainActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
     private var songs by mutableStateOf(listOf<LocalSong>())
+    private var importedSongs by mutableStateOf(listOf<LocalSong>())
     private var onlineSongs by mutableStateOf(listOf<OnlineSong>())
     private var currentSongTitle by mutableStateOf<String?>(null)
     private var currentSongArtist by mutableStateOf<String?>(null)
@@ -73,6 +74,21 @@ class MainActivity : ComponentActivity() {
     private var playbackPosition by mutableStateOf(0L)
     private var playbackDuration by mutableStateOf(0L)
     private var progressJob: Job? = null
+
+    private val audioPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            catch (_: Exception) { }
+            if (importedSongs.none { it.uri == uri } && songs.none { it.uri == uri }) {
+                val displayName = uri.lastPathSegment?.substringAfterLast('/')?.substringBefore('?')
+                    ?.substringAfterLast(':')?.ifBlank { "Imported audio" } ?: "Imported audio"
+                val added = LocalSong(-System.currentTimeMillis(),
+                    displayName.substringBeforeLast('.', displayName), "Local audio file", uri)
+                importedSongs = importedSongs + added
+                songs = songs + added
+            }
+        }
+    }
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -114,9 +130,7 @@ class MainActivity : ComponentActivity() {
                 onSearchQueryChange = { searchQuery = it },
                 onSearch = { searchOnlineMusic() },
                 onRefresh = { refreshCurrentScreen() },
-                onOpenOfficialSearch = { openOfficialMusicSearch() },
-                onOpenMyYouTubeSong = { openMyYouTubeSong() },
-                onBrowseTamilCategory = { openTamilMusicCategory(it) },
+                onAddMp3 = { audioPicker.launch(arrayOf("audio/mpeg", "audio/mp3", "audio/*")) },
                 onThemeToggle = { darkMode = !darkMode },
                 onQualityToggle = {
                     highQualityAudio = !highQualityAudio
@@ -173,7 +187,7 @@ class MainActivity : ComponentActivity() {
                     it.getString(artistColumn) ?: "Unknown artist", ContentUris.withAppendedId(collection, id)))
             }
         }
-        songs = found
+        songs = found + importedSongs
     }
 
     private fun openDolbyAtmosSettings() {
@@ -364,8 +378,7 @@ private fun SoundOfSoulsScreen(
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
     playbackPosition: Long, playbackDuration: Long,
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
-    onOpenOfficialSearch: () -> Unit, onOpenMyYouTubeSong: () -> Unit,
-    onBrowseTamilCategory: (String) -> Unit,
+    onAddMp3: () -> Unit,
     onThemeToggle: () -> Unit, onQualityToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
@@ -463,37 +476,9 @@ private fun SoundOfSoulsScreen(
                             label = { Text("My library") }, leadingIcon = { Icon(Icons.Default.LibraryMusic, null) })
                     }
                     if (selectedTab == AppTab.ONLINE) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-                            colors = CardDefaults.cardColors(containerColor = panel)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.PlayCircleFilled, contentDescription = null,
-                                    tint = Color(0xFFD8FF00), modifier = Modifier.size(38.dp))
-                                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                                    Text("My YouTube song", color = primaryText, fontWeight = FontWeight.Bold)
-                                    Text("Your official YouTube upload • plays on YouTube", color = secondaryText, fontSize = 11.sp)
-                                }
-                                Button(onClick = onOpenMyYouTubeSong) { Text("Play") }
-                            }
-                        }
-                        Text("Browse Tamil music", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedButton(onClick = { onBrowseTamilCategory("Trending Tamil songs") }, modifier = Modifier.weight(1f)) {
-                                Text("Trending", fontSize = 10.sp)
-                            }
-                            OutlinedButton(onClick = { onBrowseTamilCategory("Tamil movie songs") }, modifier = Modifier.weight(1f)) {
-                                Text("Movies", fontSize = 10.sp)
-                            }
-                            OutlinedButton(onClick = { onBrowseTamilCategory("Tamil independent album songs") }, modifier = Modifier.weight(1f)) {
-                                Text("Albums", fontSize = 10.sp)
-                            }
-                        }
-                        Text("Browse official YouTube Music results", color = secondaryText, fontSize = 11.sp,
-                            modifier = Modifier.padding(bottom = 8.dp))
+                        Text("MP3 music discovery", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Play audio files directly inside Sound of Souls. Only reusable, open-licensed tracks are shown here.",
+                            color = secondaryText, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
                         Text("Find your next favourite", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                         Text(if (highQualityAudio) "High quality preference: lossless files first when available" else "Search open-licensed music you can stream", color = secondaryText, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
@@ -512,21 +497,6 @@ private fun SoundOfSoulsScreen(
                         if (searchError != null) {
                             Text(searchError, color = secondaryText, fontSize = 13.sp,
                                 modifier = Modifier.padding(vertical = 8.dp))
-                            if (!isSearching && searchQuery.isNotBlank() && onlineSongs.isEmpty()) {
-                                OutlinedButton(
-                                    onClick = onOpenOfficialSearch,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(Icons.Default.OpenInNew, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Listen free on YouTube Music")
-                                }
-                                Text(
-                                    "Opens the official music service. Sound of Souls cannot stream copyrighted tracks without permission.",
-                                    color = secondaryText, fontSize = 11.sp,
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                )
-                            }
                         }
                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(onlineSongs, key = { it.identifier + it.streamUrl }) { song ->
@@ -536,9 +506,19 @@ private fun SoundOfSoulsScreen(
                             }
                         }
                     } else {
-                        Text("Your music", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                        Text("${songs.size} songs on this device", color = secondaryText, fontSize = 13.sp,
-                            modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Your music", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                                Text("${songs.size} audio files on this device", color = secondaryText, fontSize = 13.sp)
+                            }
+                            Button(onClick = onAddMp3) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Add MP3")
+                            }
+                        }
+                        Text("Choose an audio file from your phone. MP3 files play directly in the app.",
+                            color = secondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(songs, key = { it.id }) { song ->
                                 SongRow(song.title, song.artist, "On this device", panel, primaryText, secondaryText, accent) { onSongClick(song) }

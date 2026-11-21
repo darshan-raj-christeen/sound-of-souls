@@ -230,6 +230,8 @@ class MainActivity : ComponentActivity() {
         lyricsLoading = false
         lyricsText = null; syncedLyrics = ""; lyricsError = null
         player.setMediaItem(MediaItem.fromUri(song.uri)); player.prepare(); player.play()
+        // Automatically look up lyrics as soon as a new local track starts.
+        findLyrics()
     }
 
     private fun playOnlineSong(song: OnlineSong) {
@@ -239,6 +241,8 @@ class MainActivity : ComponentActivity() {
         lyricsLoading = false
         lyricsText = null; syncedLyrics = ""; lyricsError = null
         player.setMediaItem(MediaItem.fromUri(song.streamUrl)); player.prepare(); player.play()
+        // Automatically look up lyrics as soon as a new online track starts.
+        findLyrics()
     }
 
     private fun togglePlayback() {
@@ -487,6 +491,11 @@ private fun SoundOfSoulsScreen(
                         if (playbackError != null) {
                             Text(playbackError, color = Color(0xFFE57373), fontSize = 11.sp,
                                 modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                        }
+                        when {
+                            lyricsLoading -> Text("Finding lyrics automatically…", color = secondaryText, fontSize = 11.sp)
+                            lyricsText != null -> Text("Lyrics ready • tap the lyrics icon", color = accent, fontSize = 11.sp)
+                            lyricsError != null -> Text("No verified lyrics found for this track", color = secondaryText, fontSize = 11.sp)
                         }
                         /* PLAYER_CONTROLS_START */
                         Slider(value = if (playbackDuration > 0) playbackPosition.coerceIn(0, playbackDuration).toFloat() else 0f,

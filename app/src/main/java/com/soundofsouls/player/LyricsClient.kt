@@ -63,18 +63,12 @@ object LyricsClient {
             val trackExact = candidateTrack == wantedTrack
             val trackClose = trackExact || candidateTrack.contains(wantedTrack) ||
                 wantedTrack.contains(candidateTrack)
-            val wantedArtistTokens = wantedArtist.split(" ").filter { it.length > 1 }.toSet()
-            val candidateArtistTokens = candidateArtist.split(" ").filter { it.length > 1 }.toSet()
-            val sharedArtistTokens = wantedArtistTokens.intersect(candidateArtistTokens).size
-            val artistClose = wantedArtist.isBlank() || candidateArtist == wantedArtist ||
-                candidateArtist.contains(wantedArtist) || wantedArtist.contains(candidateArtist) ||
-                (wantedArtistTokens.isNotEmpty() && sharedArtistTokens >= 1 &&
-                    sharedArtistTokens.toDouble() / wantedArtistTokens.size >= 0.5)
-            // Never accept a same-title result from a different artist. A missing artist
-            // is allowed, but a supplied artist must have a meaningful match.
-            if (!trackClose || (wantedArtist.isNotBlank() && !artistClose)) return@mapNotNull null
-            val score = (if (trackExact) 100 else 60) +
-                (if (artistClose && wantedArtist.isNotBlank()) 30 else 0) +
+            // Require both an exact normalized title and exact normalized artist.
+            // If the local file has no usable artist tag, don't guess: wrong lyrics are worse
+            // than clearly reporting that no verified match is available.
+            val artistExact = wantedArtist.isNotBlank() && candidateArtist == wantedArtist
+            if (!trackExact || !artistExact) return@mapNotNull null
+            val score = 130 +
                 (if (candidate.optString("syncedLyrics").isNotBlank()) 5 else 0) +
                 (if (candidate.optString("plainLyrics").isNotBlank()) 2 else 0)
             score to candidate

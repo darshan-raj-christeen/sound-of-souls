@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
                 onPlayPause = { togglePlayback() },
                 onLyricsClick = { showLyrics = true; if (lyricsText == null && !lyricsLoading) findLyrics() },
                 onLyricsBack = { showLyrics = false },
+                onSaveLyrics = { saveManualLyrics(it) },
                 onSeek = { player.seekTo(it) },
                 onNext = { skipSong(true) }, onPrevious = { skipSong(false) }
             )
@@ -253,9 +254,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun manualLyricsKey(title: String, artist: String): String =
+        "manual_lyrics_" + (title.trim().lowercase() + "|" + artist.trim().lowercase())
+
+    private fun saveManualLyrics(text: String) {
+        val title = currentSongTitle ?: return
+        val artist = currentSongArtist ?: ""
+        getSharedPreferences("sound_of_souls_lyrics", MODE_PRIVATE).edit()
+            .putString(manualLyricsKey(title, artist), text).apply()
+        lyricsText = text.takeIf { it.isNotBlank() }
+        syncedLyrics = ""
+        lyricsError = if (text.isBlank()) "No saved lyrics. Tap Find lyrics to search again." else null
+    }
+
     private fun findLyrics() {
         val title = currentSongTitle ?: return
         val artist = currentSongArtist ?: ""
+        val savedLyrics = getSharedPreferences("sound_of_souls_lyrics", MODE_PRIVATE)
+            .getString(manualLyricsKey(title, artist), null)
+        if (!savedLyrics.isNullOrBlank()) {
+            lyricsText = savedLyrics
+            syncedLyrics = ""
+            lyricsError = null
+            return
+        }
         lifecycleScope.launch {
             lyricsLoading = true; lyricsError = null
             try {
@@ -293,7 +315,7 @@ private fun SoundOfSoulsScreen(
     onThemeToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
-    onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
+    onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
 ) {
     val bg = if (darkMode) Color(0xFF090711) else Color(0xFFF5F2FA)
     val panel = if (darkMode) Color(0xFF211D30) else Color(0xFFFFFFFF)
@@ -301,6 +323,8 @@ private fun SoundOfSoulsScreen(
     val secondaryText = if (darkMode) Color(0xFFD0C8DD) else Color(0xFF665D70)
     val accent = Color(0xFF9567EF)
     val fmt: (Long) -> String = { ms -> "%d:%02d".format(ms / 60000, (ms / 1000) % 60) }
+    var showLyricsEditor by remember { mutableStateOf(false) }
+    var lyricsDraft by remember { mutableStateOf("") }
 
     MaterialTheme(colorScheme = if (darkMode) darkColorScheme(primary = accent, surface = panel, background = bg)
         else lightColorScheme(primary = accent, surface = panel, background = bg)) {
@@ -329,6 +353,36 @@ private fun SoundOfSoulsScreen(
                     }
                     Text(currentSongTitle ?: "No song selected", color = primaryText, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Text(currentSongArtist ?: "", color = secondaryText, fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            lyricsDraft = lyricsText.orEmpty()
+                            showLyricsEditor = true
+                        }) { Text("Add / edit my lyrics") }
+                    }
+                    if (showLyricsEditor) {
+                        AlertDialog(
+                            onDismissRequest = { showLyricsEditor = false },
+                            title = { Text("Your song lyrics") },
+                            text = {
+                                OutlinedTextField(
+                                    value = lyricsDraft,
+                                    onValueChange = { lyricsDraft = it },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),
+                                    placeholder = { Text("Paste or type the correct lyrics here") },
+                                    minLines = 6
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    onSaveLyrics(lyricsDraft)
+                                    showLyricsEditor = false
+                                }) { Text("Save lyrics") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showLyricsEditor = false }) { Text("Cancel") }
+                            }
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
                     when {
                         lyricsLoading -> Text("Finding lyrics…", color = secondaryText)

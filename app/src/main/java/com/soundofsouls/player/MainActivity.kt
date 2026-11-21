@@ -52,6 +52,7 @@ private enum class AppTab { ONLINE, LIBRARY }
 class MainActivity : ComponentActivity() {
     private lateinit var player: ExoPlayer
     private var songs by mutableStateOf(listOf<LocalSong>())
+    private var builtInSongs by mutableStateOf(listOf<LocalSong>())
     private var importedSongs by mutableStateOf(listOf<LocalSong>())
     private var onlineSongs by mutableStateOf(listOf<OnlineSong>())
     private var currentSongTitle by mutableStateOf<String?>(null)
@@ -121,10 +122,13 @@ class MainActivity : ComponentActivity() {
         })
         startProgressUpdates()
         restoreImportedSongs()
+        builtInSongs = BuiltInSongCatalog.resolve(this)
+        songs = builtInSongs + importedSongs
         requestAudioPermission()
         setContent {
             SoundOfSoulsScreen(
                 songs = songs, onlineSongs = onlineSongs,
+                featuredSongAvailable = builtInSongs.any { it.title.equals("Radhimaa", ignoreCase = true) },
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
                 isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
                 isSearching = isSearching, searchError = searchError,
@@ -147,6 +151,7 @@ class MainActivity : ComponentActivity() {
                 onDolbyAtmosClick = { openDolbyAtmosSettings() },
                 onTabChange = { selectedTab = it },
                 onSongClick = { playLocalSong(it) },
+                onFeaturedSongClick = { builtInSongs.firstOrNull { it.title.equals("Radhimaa", ignoreCase = true) }?.let { playLocalSong(it) } },
                 onOnlineSongClick = { playOnlineSong(it) },
                 onPlayPause = { togglePlayback() },
                 onLyricsClick = { showLyrics = true; if (lyricsText == null && !lyricsLoading) findLyrics() },
@@ -208,7 +213,8 @@ class MainActivity : ComponentActivity() {
                     it.getString(artistColumn) ?: "Unknown artist", ContentUris.withAppendedId(collection, id)))
             }
         }
-        songs = found + importedSongs
+        builtInSongs = BuiltInSongCatalog.resolve(this)
+        songs = builtInSongs + found + importedSongs
     }
 
     private fun openDolbyAtmosSettings() {
@@ -392,7 +398,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SoundOfSoulsScreen(
-    songs: List<LocalSong>, onlineSongs: List<OnlineSong>,
+    songs: List<LocalSong>, onlineSongs: List<OnlineSong>, featuredSongAvailable: Boolean,
     currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
@@ -401,7 +407,7 @@ private fun SoundOfSoulsScreen(
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
     onAddMp3: () -> Unit,
     onThemeToggle: () -> Unit, onQualityToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
-    onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
+    onSongClick: (LocalSong) -> Unit, onFeaturedSongClick: () -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
     onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
 ) {
@@ -513,6 +519,7 @@ private fun SoundOfSoulsScreen(
                                     ),
                                     RoundedCornerShape(18.dp)
                                 )
+                                .clickable(enabled = featuredSongAvailable, onClick = onFeaturedSongClick)
                                 .padding(16.dp)
                         ) {
                             Text("FEATURED SONG", color = Color(0xFFD6BFFF), fontSize = 10.sp,
@@ -527,9 +534,12 @@ private fun SoundOfSoulsScreen(
                                     Text("Sai Abhyankkar", color = Color(0xFFE0D7EF), fontSize = 13.sp)
                                 }
                             }
-                            Text("Your Sound of Souls featured track",
+                            Text(
+                                if (featuredSongAvailable) "Tap to play this built-in song"
+                                else "Add radhimaa.mp3 to app/src/main/res/raw to enable playback",
                                 color = Color(0xFFD6BFFF), fontSize = 11.sp,
-                                modifier = Modifier.padding(top = 8.dp))
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
                         }
                         Spacer(Modifier.height(14.dp))
                         Text("MP3 music discovery", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)

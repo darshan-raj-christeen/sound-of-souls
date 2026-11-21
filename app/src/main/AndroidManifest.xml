@@ -5,6 +5,8 @@
     <application
         android:allowBackup="true"
         android:label="Sound of Souls"
+        android:icon="@drawable/ic_launcher_logo"
+        android:roundIcon="@drawable/ic_launcher_logo"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <activity

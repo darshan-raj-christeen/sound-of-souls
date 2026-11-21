@@ -418,16 +418,24 @@ private fun SoundOfSoulsScreen(
         else lightColorScheme(primary = accent, surface = panel, background = bg)) {
         Surface(Modifier.fillMaxSize(), color = bg) {
             Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                listOf(Color(0xFF100B1C), Color(0xFF24143B), Color(0xFF0B0912))
+                            ),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_launcher_logo),
-                        contentDescription = "Sound of Souls channel logo",
-                        modifier = Modifier.size(46.dp)
+                        contentDescription = "Sound of Souls logo",
+                        modifier = Modifier.size(58.dp)
                     )
-                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text("SOUND OF SOULS", color = primaryText, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("YOUR MUSIC. YOUR WORLD.", color = accent, fontSize = 10.sp, letterSpacing = 2.sp)
-                    }
+                    Spacer(Modifier.weight(1f))
                     IconButton(onClick = onThemeToggle) {
                         Icon(if (darkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = "Switch theme", tint = primaryText)

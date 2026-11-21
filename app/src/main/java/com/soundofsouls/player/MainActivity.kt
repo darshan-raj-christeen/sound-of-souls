@@ -81,6 +81,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        highQualityAudio = getSharedPreferences("sound_of_souls_settings", MODE_PRIVATE)
+            .getBoolean("high_quality_audio", false)
         player = ExoPlayer.Builder(this).build()
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
@@ -116,7 +118,12 @@ class MainActivity : ComponentActivity() {
                 onOpenMyYouTubeSong = { openMyYouTubeSong() },
                 onBrowseTamilCategory = { openTamilMusicCategory(it) },
                 onThemeToggle = { darkMode = !darkMode },
-                onQualityToggle = { highQualityAudio = !highQualityAudio; if (searchQuery.isNotBlank()) searchOnlineMusic() },
+                onQualityToggle = {
+                    highQualityAudio = !highQualityAudio
+                    getSharedPreferences("sound_of_souls_settings", MODE_PRIVATE).edit()
+                        .putBoolean("high_quality_audio", highQualityAudio).apply()
+                    if (searchQuery.isNotBlank()) searchOnlineMusic()
+                },
                 onDolbyAtmosClick = { openDolbyAtmosSettings() },
                 onTabChange = { selectedTab = it },
                 onSongClick = { playLocalSong(it) },

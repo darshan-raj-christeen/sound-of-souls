@@ -66,8 +66,11 @@ object LyricsClient {
             // Require both an exact normalized title and exact normalized artist.
             // If the local file has no usable artist tag, don't guess: wrong lyrics are worse
             // than clearly reporting that no verified match is available.
+            val artistMissing = wantedArtist.isBlank() || wantedArtist == "unknown artist" || wantedArtist == "unknown"
             val artistExact = wantedArtist.isNotBlank() && candidateArtist == wantedArtist
-            if (!trackExact || !artistExact) return@mapNotNull null
+            // If Android has no artist tag, an exact title match is still useful.
+            // When a real artist tag exists, keep requiring an exact artist match to avoid wrong lyrics.
+            if (!trackExact || (!artistMissing && !artistExact)) return@mapNotNull null
             val score = 130 +
                 (if (candidate.optString("syncedLyrics").isNotBlank()) 5 else 0) +
                 (if (candidate.optString("plainLyrics").isNotBlank()) 2 else 0)

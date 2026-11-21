@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private var lyricsText by mutableStateOf<String?>(null)
     private var syncedLyrics by mutableStateOf("")
     private var lyricsLoading by mutableStateOf(false)
+    private var lyricsRequestId = 0L
     private var lyricsError by mutableStateOf<String?>(null)
     private var showLyrics by mutableStateOf(false)
     private var darkMode by mutableStateOf(true)
@@ -225,6 +226,8 @@ class MainActivity : ComponentActivity() {
     private fun playLocalSong(song: LocalSong) {
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = false
         playbackError = null
+        lyricsRequestId++
+        lyricsLoading = false
         lyricsText = null; syncedLyrics = ""; lyricsError = null
         player.setMediaItem(MediaItem.fromUri(song.uri)); player.prepare(); player.play()
     }
@@ -232,6 +235,8 @@ class MainActivity : ComponentActivity() {
     private fun playOnlineSong(song: OnlineSong) {
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = true
         playbackError = null
+        lyricsRequestId++
+        lyricsLoading = false
         lyricsText = null; syncedLyrics = ""; lyricsError = null
         player.setMediaItem(MediaItem.fromUri(song.streamUrl)); player.prepare(); player.play()
     }
@@ -258,6 +263,8 @@ class MainActivity : ComponentActivity() {
         "manual_lyrics_" + (title.trim().lowercase() + "|" + artist.trim().lowercase())
 
     private fun saveManualLyrics(text: String) {
+        lyricsRequestId++
+        lyricsLoading = false
         val title = currentSongTitle ?: return
         val artist = currentSongArtist ?: ""
         getSharedPreferences("sound_of_souls_lyrics", MODE_PRIVATE).edit()
@@ -270,28 +277,42 @@ class MainActivity : ComponentActivity() {
     private fun findLyrics() {
         val title = currentSongTitle ?: return
         val artist = currentSongArtist ?: ""
+        val requestId = ++lyricsRequestId
         val savedLyrics = getSharedPreferences("sound_of_souls_lyrics", MODE_PRIVATE)
             .getString(manualLyricsKey(title, artist), null)
         if (!savedLyrics.isNullOrBlank()) {
             lyricsText = savedLyrics
             syncedLyrics = ""
             lyricsError = null
+            lyricsLoading = false
             return
         }
         lifecycleScope.launch {
-            lyricsLoading = true; lyricsError = null
+            lyricsLoading = true
+            lyricsError = null
             try {
                 val result = withContext(Dispatchers.IO) { LyricsClient.find(title, artist) }
+                // A slow lookup for the previous track must never overwrite the current track's lyrics.
+                if (requestId != lyricsRequestId ||
+                    title != currentSongTitle || artist != (currentSongArtist ?: "")) return@launch
                 if (result == null) {
-                    lyricsError = "Lyrics weren't found for this exact song. You can try checking the title and artist."
-                    lyricsText = null; syncedLyrics = ""
+                    lyricsError = "Verified lyrics weren't found for this exact song."
+                    lyricsText = null
+                    syncedLyrics = ""
                 } else {
                     lyricsText = result.plainLyrics.ifBlank { result.syncedLyrics }
                     syncedLyrics = result.syncedLyrics
                 }
             } catch (e: Exception) {
-                lyricsError = "Couldn't retrieve lyrics. Check your internet connection and try again."
-            } finally { lyricsLoading = false }
+                if (requestId == lyricsRequestId &&
+                    title == currentSongTitle && artist == (currentSongArtist ?: "")) {
+                    lyricsError = "Couldn't retrieve lyrics. Check your internet connection and try again."
+                    lyricsText = null
+                    syncedLyrics = ""
+                }
+            } finally {
+                if (requestId == lyricsRequestId) lyricsLoading = false
+            }
         }
     }
 

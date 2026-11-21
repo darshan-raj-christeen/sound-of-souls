@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
         requestAudioPermission()
         setContent {
             SoundOfSoulsScreen(
-                songs = songs, onlineSongs = onlineSongs,
+                songs = songs, builtInSongs = builtInSongs, onlineSongs = onlineSongs,
                 featuredSongAvailable = builtInSongs.any { it.title.equals("Radhimaa", ignoreCase = true) },
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
                 isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
@@ -398,7 +398,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SoundOfSoulsScreen(
-    songs: List<LocalSong>, onlineSongs: List<OnlineSong>, featuredSongAvailable: Boolean,
+    songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>, featuredSongAvailable: Boolean,
     currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
@@ -542,6 +542,28 @@ private fun SoundOfSoulsScreen(
                             )
                         }
                         Spacer(Modifier.height(14.dp))
+                        val soundOfSoulsTracks = builtInSongs.filter { it.artist.contains("Sound of Souls", ignoreCase = true) }
+                        val otherArtistTracks = builtInSongs.filterNot { it.artist.contains("Sound of Souls", ignoreCase = true) }
+                        if (soundOfSoulsTracks.isNotEmpty()) {
+                            Text("Sound of Souls", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 6.dp))
+                            soundOfSoulsTracks.forEach { track ->
+                                SongRow(track.title, track.artist, "Built-in song • Offline playback", panel, primaryText, secondaryText, accent) {
+                                    onSongClick(track)
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        if (otherArtistTracks.isNotEmpty()) {
+                            Text("Other Artists", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 6.dp))
+                            otherArtistTracks.forEach { track ->
+                                SongRow(track.title, track.artist, "Other artists • Offline playback", panel, primaryText, secondaryText, accent) {
+                                    onSongClick(track)
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
                         Text("MP3 music discovery", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text("Play audio files directly inside Sound of Souls. Only reusable, open-licensed tracks are shown here.",
                             color = secondaryText, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))

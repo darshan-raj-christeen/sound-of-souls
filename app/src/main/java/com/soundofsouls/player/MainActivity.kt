@@ -476,6 +476,33 @@ private fun SoundOfSoulsScreen(
                             label = { Text("My library") }, leadingIcon = { Icon(Icons.Default.LibraryMusic, null) })
                     }
                     if (selectedTab == AppTab.ONLINE) {
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .background(
+                                    androidx.compose.ui.graphics.Brush.linearGradient(
+                                        listOf(Color(0xFF39245F), Color(0xFF171323))
+                                    ),
+                                    RoundedCornerShape(18.dp)
+                                )
+                                .padding(16.dp)
+                        ) {
+                            Text("FEATURED SONG", color = Color(0xFFD6BFFF), fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                            Spacer(Modifier.height(7.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.MusicNote, null, tint = Color.White,
+                                    modifier = Modifier.size(38.dp))
+                                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                    Text("Radhimaa", color = Color.White, fontSize = 21.sp,
+                                        fontWeight = FontWeight.ExtraBold)
+                                    Text("Sai Abhyankkar", color = Color(0xFFE0D7EF), fontSize = 13.sp)
+                                }
+                            }
+                            Text("Your Sound of Souls featured track",
+                                color = Color(0xFFD6BFFF), fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 8.dp))
+                        }
+                        Spacer(Modifier.height(14.dp))
                         Text("MP3 music discovery", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text("Play audio files directly inside Sound of Souls. Only reusable, open-licensed tracks are shown here.",
                             color = secondaryText, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))

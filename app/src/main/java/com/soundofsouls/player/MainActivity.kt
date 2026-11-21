@@ -2,6 +2,9 @@ package com.soundofsouls.player
 
 import android.Manifest
 import android.content.ContentUris
+import android.content.Intent
+import android.media.audiofx.AudioEffect
+import android.provider.Settings
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
@@ -107,6 +110,7 @@ class MainActivity : ComponentActivity() {
                 onSearch = { searchOnlineMusic() },
                 onRefresh = { refreshCurrentScreen() },
                 onThemeToggle = { darkMode = !darkMode },
+                onDolbyAtmosClick = { openDolbyAtmosSettings() },
                 onTabChange = { selectedTab = it },
                 onSongClick = { playLocalSong(it) },
                 onOnlineSongClick = { playOnlineSong(it) },
@@ -155,6 +159,23 @@ class MainActivity : ComponentActivity() {
             }
         }
         songs = found
+    }
+
+    private fun openDolbyAtmosSettings() {
+        val effectIntent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
+            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
+            putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+            putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+        }
+        try {
+            startActivity(effectIntent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
+            } catch (_: Exception) {
+                playbackError = "Open Settings > Sound & vibration > Dolby Atmos to adjust audio."
+            }
+        }
     }
 
     private fun refreshCurrentScreen() {
@@ -252,7 +273,7 @@ private fun SoundOfSoulsScreen(
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
     playbackPosition: Long, playbackDuration: Long,
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
-    onThemeToggle: () -> Unit, onTabChange: (AppTab) -> Unit,
+    onThemeToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
     onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
@@ -276,6 +297,9 @@ private fun SoundOfSoulsScreen(
                     IconButton(onClick = onThemeToggle) {
                         Icon(if (darkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = "Switch theme", tint = primaryText)
+                    }
+                    IconButton(onClick = onDolbyAtmosClick) {
+                        Icon(Icons.Default.GraphicEq, contentDescription = "Dolby Atmos settings", tint = accent)
                     }
                     IconButton(onClick = onRefresh) {
                         Icon(Icons.Default.Refresh, contentDescription = "Reload", tint = primaryText)

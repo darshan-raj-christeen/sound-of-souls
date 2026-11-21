@@ -65,9 +65,11 @@ object LyricsClient {
                 wantedTrack.contains(candidateTrack)
             val artistClose = wantedArtist.isBlank() || candidateArtist == wantedArtist ||
                 candidateArtist.contains(wantedArtist) || wantedArtist.contains(candidateArtist)
-            if (!trackClose || !artistClose) return@mapNotNull null
+            // Exact title matches are useful even when a catalogue reports a different
+            // artist spelling or a compilation artist. Fuzzy titles still require artist support.
+            if (!trackClose || (!trackExact && !artistClose)) return@mapNotNull null
             val score = (if (trackExact) 100 else 60) +
-                (if (artistClose && wantedArtist.isNotBlank()) 30 else 0) +
+                (if (artistClose && wantedArtist.isNotBlank()) 30 else if (wantedArtist.isNotBlank()) -15 else 0) +
                 (if (candidate.optString("syncedLyrics").isNotBlank()) 5 else 0) +
                 (if (candidate.optString("plainLyrics").isNotBlank()) 2 else 0)
             score to candidate

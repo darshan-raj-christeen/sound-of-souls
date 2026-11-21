@@ -111,6 +111,7 @@ class MainActivity : ComponentActivity() {
                 onSearch = { searchOnlineMusic() },
                 onRefresh = { refreshCurrentScreen() },
                 onOpenOfficialSearch = { openOfficialMusicSearch() },
+                onOpenMyYouTubeSong = { openMyYouTubeSong() },
                 onThemeToggle = { darkMode = !darkMode },
                 onDolbyAtmosClick = { openDolbyAtmosSettings() },
                 onTabChange = { selectedTab = it },
@@ -194,6 +195,12 @@ class MainActivity : ComponentActivity() {
                 playbackError = "No compatible music app or browser was found."
             }
         }
+    }
+
+    private fun openMyYouTubeSong() {
+        val videoUri = Uri.parse("https://youtu.be/0d0Ud58wCq8")
+        try { startActivity(Intent(Intent.ACTION_VIEW, videoUri)) }
+        catch (_: Exception) { playbackError = "Could not open the official YouTube video. Check your internet connection." }
     }
 
     private fun refreshCurrentScreen() {
@@ -336,7 +343,7 @@ private fun SoundOfSoulsScreen(
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
     playbackPosition: Long, playbackDuration: Long,
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
-    onOpenOfficialSearch: () -> Unit,
+    onOpenOfficialSearch: () -> Unit, onOpenMyYouTubeSong: () -> Unit,
     onThemeToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
@@ -426,6 +433,23 @@ private fun SoundOfSoulsScreen(
                             label = { Text("My library") }, leadingIcon = { Icon(Icons.Default.LibraryMusic, null) })
                     }
                     if (selectedTab == AppTab.ONLINE) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                            colors = CardDefaults.cardColors(containerColor = panel)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.PlayCircleFilled, contentDescription = null,
+                                    tint = Color(0xFFD8FF00), modifier = Modifier.size(38.dp))
+                                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                    Text("My YouTube song", color = primaryText, fontWeight = FontWeight.Bold)
+                                    Text("Sound of Souls • Official channel video", color = secondaryText, fontSize = 11.sp)
+                                }
+                                Button(onClick = onOpenMyYouTubeSong) { Text("Play") }
+                            }
+                        }
                         Text("Find your next favourite", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                         Text("Search open-licensed music you can stream", color = secondaryText, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))

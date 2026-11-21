@@ -114,6 +114,7 @@ class MainActivity : ComponentActivity() {
                 onRefresh = { refreshCurrentScreen() },
                 onOpenOfficialSearch = { openOfficialMusicSearch() },
                 onOpenMyYouTubeSong = { openMyYouTubeSong() },
+                onBrowseTamilCategory = { openTamilMusicCategory(it) },
                 onThemeToggle = { darkMode = !darkMode },
                 onQualityToggle = { highQualityAudio = !highQualityAudio; if (searchQuery.isNotBlank()) searchOnlineMusic() },
                 onDolbyAtmosClick = { openDolbyAtmosSettings() },
@@ -197,6 +198,16 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
                 playbackError = "No compatible music app or browser was found."
             }
+        }
+    }
+
+    private fun openTamilMusicCategory(query: String) {
+        val musicUri = Uri.parse("https://music.youtube.com/search?q=${Uri.encode(query)}")
+        try { startActivity(Intent(Intent.ACTION_VIEW, musicUri)) }
+        catch (_: Exception) {
+            val youtubeUri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+            try { startActivity(Intent(Intent.ACTION_VIEW, youtubeUri)) }
+            catch (_: Exception) { playbackError = "Could not open the official music search." }
         }
     }
 
@@ -347,6 +358,7 @@ private fun SoundOfSoulsScreen(
     playbackPosition: Long, playbackDuration: Long,
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
     onOpenOfficialSearch: () -> Unit, onOpenMyYouTubeSong: () -> Unit,
+    onBrowseTamilCategory: (String) -> Unit,
     onThemeToggle: () -> Unit, onQualityToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
@@ -461,6 +473,20 @@ private fun SoundOfSoulsScreen(
                                 Button(onClick = onOpenMyYouTubeSong) { Text("Play") }
                             }
                         }
+                        Text("Browse Tamil music", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(onClick = { onBrowseTamilCategory("Trending Tamil songs") }, modifier = Modifier.weight(1f)) {
+                                Text("Trending", fontSize = 10.sp)
+                            }
+                            OutlinedButton(onClick = { onBrowseTamilCategory("Tamil movie songs") }, modifier = Modifier.weight(1f)) {
+                                Text("Movies", fontSize = 10.sp)
+                            }
+                            OutlinedButton(onClick = { onBrowseTamilCategory("Tamil independent album songs") }, modifier = Modifier.weight(1f)) {
+                                Text("Albums", fontSize = 10.sp)
+                            }
+                        }
+                        Text("Browse official YouTube Music results", color = secondaryText, fontSize = 11.sp,
+                            modifier = Modifier.padding(bottom = 8.dp))
                         Text("Find your next favourite", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                         Text(if (highQualityAudio) "High quality preference: lossless files first when available" else "Search open-licensed music you can stream", color = secondaryText, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))

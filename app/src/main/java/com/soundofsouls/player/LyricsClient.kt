@@ -63,13 +63,18 @@ object LyricsClient {
             val trackExact = candidateTrack == wantedTrack
             val trackClose = trackExact || candidateTrack.contains(wantedTrack) ||
                 wantedTrack.contains(candidateTrack)
+            val wantedArtistTokens = wantedArtist.split(" ").filter { it.length > 1 }.toSet()
+            val candidateArtistTokens = candidateArtist.split(" ").filter { it.length > 1 }.toSet()
+            val sharedArtistTokens = wantedArtistTokens.intersect(candidateArtistTokens).size
             val artistClose = wantedArtist.isBlank() || candidateArtist == wantedArtist ||
-                candidateArtist.contains(wantedArtist) || wantedArtist.contains(candidateArtist)
-            // Exact title matches are useful even when a catalogue reports a different
-            // artist spelling or a compilation artist. Fuzzy titles still require artist support.
-            if (!trackClose || (!trackExact && !artistClose)) return@mapNotNull null
+                candidateArtist.contains(wantedArtist) || wantedArtist.contains(candidateArtist) ||
+                (wantedArtistTokens.isNotEmpty() && sharedArtistTokens >= 1 &&
+                    sharedArtistTokens.toDouble() / wantedArtistTokens.size >= 0.5)
+            // Never accept a same-title result from a different artist. A missing artist
+            // is allowed, but a supplied artist must have a meaningful match.
+            if (!trackClose || (wantedArtist.isNotBlank() && !artistClose)) return@mapNotNull null
             val score = (if (trackExact) 100 else 60) +
-                (if (artistClose && wantedArtist.isNotBlank()) 30 else if (wantedArtist.isNotBlank()) -15 else 0) +
+                (if (artistClose && wantedArtist.isNotBlank()) 30 else 0) +
                 (if (candidate.optString("syncedLyrics").isNotBlank()) 5 else 0) +
                 (if (candidate.optString("plainLyrics").isNotBlank()) 2 else 0)
             score to candidate

@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
                 onSearchQueryChange = { searchQuery = it },
                 onSearch = { searchOnlineMusic() },
                 onRefresh = { refreshCurrentScreen() },
+                onOpenOfficialSearch = { openOfficialMusicSearch() },
                 onThemeToggle = { darkMode = !darkMode },
                 onDolbyAtmosClick = { openDolbyAtmosSettings() },
                 onTabChange = { selectedTab = it },
@@ -174,6 +175,21 @@ class MainActivity : ComponentActivity() {
                 startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
             } catch (_: Exception) {
                 playbackError = "Open Settings > Sound & vibration > Dolby Atmos to adjust audio."
+            }
+        }
+    }
+
+    private fun openOfficialMusicSearch() {
+        val query = searchQuery.trim().ifBlank { currentSongTitle ?: "music" }
+        val musicUri = Uri.parse("https://music.youtube.com/search?q=${Uri.encode(query)}")
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, musicUri))
+        } catch (_: Exception) {
+            val youtubeUri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, youtubeUri))
+            } catch (_: Exception) {
+                playbackError = "No compatible music app or browser was found."
             }
         }
     }
@@ -345,8 +361,25 @@ private fun SoundOfSoulsScreen(
                             keyboardActions = KeyboardActions(onSearch = { onSearch() })
                         )
                         if (isSearching) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-                        if (searchError != null) Text(searchError, color = secondaryText, fontSize = 13.sp,
-                            modifier = Modifier.padding(vertical = 8.dp))
+                        if (searchError != null) {
+                            Text(searchError, color = secondaryText, fontSize = 13.sp,
+                                modifier = Modifier.padding(vertical = 8.dp))
+                            if (!isSearching && searchQuery.isNotBlank() && onlineSongs.isEmpty()) {
+                                OutlinedButton(
+                                    onClick = onOpenOfficialSearch,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.OpenInNew, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Listen free on YouTube Music")
+                                }
+                                Text(
+                                    "Opens the official music service. Sound of Souls cannot stream copyrighted tracks without permission.",
+                                    color = secondaryText, fontSize = 11.sp,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                            }
+                        }
                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(onlineSongs, key = { it.identifier + it.streamUrl }) { song ->
                                 SongRow(song.title, song.artist, "Open-licensed • Internet Archive", panel, primaryText, secondaryText, accent) {

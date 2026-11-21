@@ -86,6 +86,11 @@ class MainActivity : ComponentActivity() {
                     displayName.substringBeforeLast('.', displayName), "Local audio file", uri)
                 importedSongs = importedSongs + added
                 songs = songs + added
+                val savedUris = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
+                    .getStringSet("imported_song_uris", emptySet())?.toMutableSet() ?: mutableSetOf()
+                savedUris.add(uri.toString())
+                getSharedPreferences("sound_of_souls_library", MODE_PRIVATE).edit()
+                    .putStringSet("imported_song_uris", savedUris).apply()
             }
         }
     }
@@ -115,6 +120,7 @@ class MainActivity : ComponentActivity() {
             }
         })
         startProgressUpdates()
+        restoreImportedSongs()
         requestAudioPermission()
         setContent {
             SoundOfSoulsScreen(
@@ -169,6 +175,21 @@ class MainActivity : ComponentActivity() {
             else Manifest.permission.READ_EXTERNAL_STORAGE
         if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) loadSongs()
         else permissionLauncher.launch(permission)
+    }
+
+    private fun restoreImportedSongs() {
+        val savedUris = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
+            .getStringSet("imported_song_uris", emptySet()).orEmpty()
+        val restored = savedUris.mapNotNull { value ->
+            try {
+                val uri = Uri.parse(value)
+                val displayName = uri.lastPathSegment?.substringAfterLast('/')?.substringBefore('?')
+                    ?.substringAfterLast(':')?.ifBlank { "Imported audio" } ?: "Imported audio"
+                LocalSong(-uri.toString().hashCode().toLong(), displayName.substringBeforeLast('.', displayName),
+                    "Imported audio", uri)
+            } catch (_: Exception) { null }
+        }
+        importedSongs = restored
     }
 
     private fun loadSongs() {

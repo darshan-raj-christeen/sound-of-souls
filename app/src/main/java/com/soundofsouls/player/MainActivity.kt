@@ -152,6 +152,7 @@ class MainActivity : ComponentActivity() {
                 onTabChange = { selectedTab = it },
                 onSongClick = { playLocalSong(it) },
                 onFeaturedSongClick = { builtInSongs.firstOrNull { it.title.equals("Radhimaa", ignoreCase = true) }?.let { playLocalSong(it) } },
+                onTrendingSongClick = { openTamilMusicCategory(it) },
                 onOnlineSongClick = { playOnlineSong(it) },
                 onPlayPause = { togglePlayback() },
                 onLyricsClick = { showLyrics = true; if (lyricsText == null && !lyricsLoading) findLyrics() },
@@ -407,7 +408,8 @@ private fun SoundOfSoulsScreen(
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
     onAddMp3: () -> Unit,
     onThemeToggle: () -> Unit, onQualityToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
-    onSongClick: (LocalSong) -> Unit, onFeaturedSongClick: () -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
+    onSongClick: (LocalSong) -> Unit, onFeaturedSongClick: () -> Unit,
+    onTrendingSongClick: (String) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
     onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
 ) {
@@ -419,6 +421,16 @@ private fun SoundOfSoulsScreen(
     val fmt: (Long) -> String = { ms -> "%d:%02d".format(ms / 60000, (ms / 1000) % 60) }
     var showLyricsEditor by remember { mutableStateOf(false) }
     var lyricsDraft by remember { mutableStateOf("") }
+    val trendingTamilSongs = listOf(
+        "Roddy Theme" to "Anirudh Ravichander",
+        "Veezha Veera" to "Sai Abhyankkar, Tippu & Arun Srinivasan",
+        "FA FA FA" to "Sai Abhyankkar & Thamizh Aadhavan",
+        "The Wild Theme" to "Sai Abhyankkar & Dhanush",
+        "Alaakaa Loova" to "Sai Abhyankkar & Rokesh",
+        "One Name" to "Anirudh Ravichander & Super Subu",
+        "Radhimaa" to "Sai Abhyankkar, Nargis Teji & Sai Smriti",
+        "Pavazha Malli" to "Sai Abhyankkar & Shruti Haasan"
+    )
 
     MaterialTheme(colorScheme = if (darkMode) darkColorScheme(primary = accent, surface = panel, background = bg)
         else lightColorScheme(primary = accent, surface = panel, background = bg)) {
@@ -587,6 +599,23 @@ private fun SoundOfSoulsScreen(
                                 modifier = Modifier.padding(vertical = 8.dp))
                         }
                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp)) {
+                                    Text("Trending Tamil songs", color = primaryText, fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold)
+                                    Text("Updated 23 Nov 2026 • Tap a song to open its official music search",
+                                        color = secondaryText, fontSize = 11.sp)
+                                }
+                            }
+                            items(trendingTamilSongs, key = { it.first }) { (title, artist) ->
+                                SongRow(title, artist, "Trending • Open in YouTube Music", panel, primaryText, secondaryText, accent) {
+                                    onTrendingSongClick("$title $artist")
+                                }
+                            }
+                            item {
+                                Text("Open-licensed tracks", color = primaryText, fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+                            }
                             items(onlineSongs, key = { it.identifier + it.streamUrl }) { song ->
                                 SongRow(song.title, song.artist, "Open-licensed • Internet Archive", panel, primaryText, secondaryText, accent) {
                                     onOnlineSongClick(song)

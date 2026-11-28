@@ -73,6 +73,8 @@ class MainActivity : ComponentActivity() {
     private var currentArtwork by mutableStateOf<Bitmap?>(null)
     private var artworkJob: Job? = null
     private var isPlaying by mutableStateOf(false)
+    private var shuffleEnabled by mutableStateOf(false)
+    private var repeatMode by mutableIntStateOf(Player.REPEAT_MODE_OFF)
     private var playbackError by mutableStateOf<String?>(null)
     private var searchQuery by mutableStateOf("")
     private var isSearching by mutableStateOf(false)
@@ -117,8 +119,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        highQualityAudio = getSharedPreferences("sound_of_souls_settings", MODE_PRIVATE)
-            .getBoolean("high_quality_audio", false)
+        val settingsPrefs = getSharedPreferences("sound_of_souls_settings", MODE_PRIVATE)
+        highQualityAudio = settingsPrefs.getBoolean("high_quality_audio", false)
+        shuffleEnabled = settingsPrefs.getBoolean("shuffle_enabled", false)
+        repeatMode = settingsPrefs.getInt("repeat_mode", Player.REPEAT_MODE_OFF)
         val libraryPrefs = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
         favouriteUris = libraryPrefs.getStringSet("favourite_song_uris", emptySet())?.toSet() ?: emptySet()
         playlistNames = libraryPrefs.getStringSet("playlist_names", emptySet()).orEmpty().sorted()
@@ -126,6 +130,8 @@ class MainActivity : ComponentActivity() {
             libraryPrefs.getStringSet("playlist_items_$name", emptySet())?.toSet() ?: emptySet()
         }
         player = ExoPlayer.Builder(this).build()
+        player.shuffleModeEnabled = shuffleEnabled
+        player.repeatMode = repeatMode
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlaybackStateChanged(state: Int) {
@@ -153,7 +159,8 @@ class MainActivity : ComponentActivity() {
                 featuredSongAvailable = builtInSongs.any { it.title.equals("Radhimaa", ignoreCase = true) },
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
                 currentArtwork = currentArtwork, upNext = upNext,
-                isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
+                isPlaying = isPlaying, shuffleEnabled = shuffleEnabled, repeatMode = repeatMode,
+                playbackError = playbackError, searchQuery = searchQuery,
                 isSearching = isSearching, searchError = searchError,
                 darkMode = darkMode, selectedTab = selectedTab, highQualityAudio = highQualityAudio,
                 showLyrics = showLyrics, lyricsText = lyricsText,
@@ -206,7 +213,21 @@ class MainActivity : ComponentActivity() {
                 onLyricsBack = { showLyrics = false },
                 onSaveLyrics = { saveManualLyrics(it) },
                 onSeek = { player.seekTo(it) },
-                onNext = { skipSong(true) }, onPrevious = { skipSong(false) }
+                onNext = { skipSong(true) }, onPrevious = { skipSong(false) },
+                onShuffleToggle = {
+                    shuffleEnabled = !shuffleEnabled
+                    player.shuffleModeEnabled = shuffleEnabled
+                    settingsPrefs.edit().putBoolean("shuffle_enabled", shuffleEnabled).apply()
+                },
+                onRepeatCycle = {
+                    repeatMode = when (repeatMode) {
+                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                        else -> Player.REPEAT_MODE_OFF
+                    }
+                    player.repeatMode = repeatMode
+                    settingsPrefs.edit().putInt("repeat_mode", repeatMode).apply()
+                }
             )
         }
     }
@@ -486,7 +507,8 @@ class MainActivity : ComponentActivity() {
 private fun SoundOfSoulsScreen(
     songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>,
     favouriteUris: Set<String>, playlistNames: List<String>, playlistSongs: Map<String, Set<String>>,
-    featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, currentArtwork: Bitmap?, upNext: List<Pair<String, String>>, isPlaying: Boolean, playbackError: String?,
+    featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, currentArtwork: Bitmap?, upNext: List<Pair<String, String>>, isPlaying: Boolean,
+    shuffleEnabled: Boolean, repeatMode: Int, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
@@ -499,7 +521,8 @@ private fun SoundOfSoulsScreen(
     onFeaturedSongClick: () -> Unit,
     onTrendingSongClick: (String) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
-    onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
+    onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit,
+    onShuffleToggle: () -> Unit, onRepeatCycle: () -> Unit
 ) {
     val bg = if (darkMode) Color(0xFF090711) else Color(0xFFF5F2FA)
     val panel = if (darkMode) Color(0xFF211D30) else Color(0xFFFFFFFF)
@@ -741,6 +764,25 @@ private fun SoundOfSoulsScreen(
                         IconButton(onClick = onNext, modifier = Modifier.size(54.dp)) {
                             Icon(Icons.Default.SkipNext, "Next", tint = primaryText, modifier = Modifier.size(34.dp))
                         }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onShuffleToggle) {
+                            Icon(Icons.Default.Shuffle, "Shuffle",
+                                tint = if (shuffleEnabled) accent else secondaryText)
+                        }
+                        Text(if (shuffleEnabled) "Shuffle on" else "Shuffle off",
+                            color = if (shuffleEnabled) accent else secondaryText, fontSize = 11.sp)
+                        Spacer(Modifier.width(18.dp))
+                        IconButton(onClick = onRepeatCycle) {
+                            Icon(if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                                "Repeat", tint = if (repeatMode != Player.REPEAT_MODE_OFF) accent else secondaryText)
+                        }
+                        Text(when (repeatMode) {
+                            Player.REPEAT_MODE_ONE -> "Repeat one"
+                            Player.REPEAT_MODE_ALL -> "Repeat all"
+                            else -> "Repeat off"
+                        }, color = if (repeatMode != Player.REPEAT_MODE_OFF) accent else secondaryText, fontSize = 11.sp)
                     }
                     if (upNext.isNotEmpty()) {
                         Text("UP NEXT", color = secondaryText, fontSize = 11.sp,

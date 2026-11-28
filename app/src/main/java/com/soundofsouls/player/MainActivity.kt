@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import java.net.HttpURLConnection
 import java.net.URL
+import android.content.ComponentName
 import android.content.ContentUris
 import android.content.Intent
 import android.media.audiofx.AudioEffect
@@ -47,7 +48,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.MediaMetadata
+import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -58,7 +62,9 @@ data class LocalSong(val id: Long, val title: String, val artist: String, val ur
 private enum class AppTab { ONLINE, LIBRARY }
 
 class MainActivity : ComponentActivity() {
-    private lateinit var player: ExoPlayer
+    private var player: MediaController? = null
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+    private var pendingMediaItem: MediaItem? = null
     private var songs by mutableStateOf(listOf<LocalSong>())
     private var builtInSongs by mutableStateOf(listOf<LocalSong>())
     private var importedSongs by mutableStateOf(listOf<LocalSong>())
@@ -130,24 +136,7 @@ class MainActivity : ComponentActivity() {
         playlistSongs = playlistNames.associateWith { name ->
             libraryPrefs.getStringSet("playlist_items_$name", emptySet())?.toSet() ?: emptySet()
         }
-        player = ExoPlayer.Builder(this).build()
-        player.shuffleModeEnabled = shuffleEnabled
-        player.repeatMode = repeatMode
-        player.setPlaybackSpeed(playbackSpeed)
-        player.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
-            override fun onPlaybackStateChanged(state: Int) {
-                playbackDuration = player.duration.takeIf { it > 0 } ?: 0L
-            }
-            override fun onPlayerError(error: PlaybackException) {
-                isPlaying = false
-                playbackError = "This stream could not be played. The source may block streaming or the file may be unavailable."
-            }
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                playbackPosition = 0L
-                playbackDuration = player.duration.takeIf { it > 0 } ?: 0L
-            }
-        })
+        connectToPlaybackService()
         startProgressUpdates()
         restoreImportedSongs()
         builtInSongs = BuiltInSongCatalog.resolve(this)
@@ -215,11 +204,11 @@ class MainActivity : ComponentActivity() {
                 onLyricsClick = { showLyrics = true; if (lyricsText == null && !lyricsLoading) findLyrics() },
                 onLyricsBack = { showLyrics = false },
                 onSaveLyrics = { saveManualLyrics(it) },
-                onSeek = { player.seekTo(it) },
+                onSeek = { player?.seekTo(it) },
                 onNext = { skipSong(true) }, onPrevious = { skipSong(false) },
                 onShuffleToggle = {
                     shuffleEnabled = !shuffleEnabled
-                    player.shuffleModeEnabled = shuffleEnabled
+                    player?.shuffleModeEnabled = shuffleEnabled
                     settingsPrefs.edit().putBoolean("shuffle_enabled", shuffleEnabled).apply()
                 },
                 onRepeatCycle = {
@@ -228,7 +217,7 @@ class MainActivity : ComponentActivity() {
                         Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                         else -> Player.REPEAT_MODE_OFF
                     }
-                    player.repeatMode = repeatMode
+                    player?.repeatMode = repeatMode
                     settingsPrefs.edit().putInt("repeat_mode", repeatMode).apply()
                 },
                 onPlaybackSpeedCycle = {
@@ -238,18 +227,67 @@ class MainActivity : ComponentActivity() {
                         1.5f -> 2.0f
                         else -> 1.0f
                     }
-                    player.setPlaybackSpeed(playbackSpeed)
+                    player?.setPlaybackSpeed(playbackSpeed)
                 }
             )
         }
+        connectToPlaybackService()
+    }
+
+    private fun connectToPlaybackService() {
+        val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
+        val future = MediaController.Builder(this, token).buildAsync()
+        controllerFuture = future
+        future.addListener({
+            try {
+                val connected = future.get()
+                player = connected
+                connected.shuffleModeEnabled = shuffleEnabled
+                connected.repeatMode = repeatMode
+                connected.setPlaybackSpeed(playbackSpeed)
+                connected.addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+                    override fun onPlaybackStateChanged(state: Int) {
+                        playbackDuration = connected.duration.takeIf { it > 0 } ?: 0L
+                    }
+                    override fun onPlayerError(error: PlaybackException) {
+                        isPlaying = false
+                        playbackError = "This stream could not be played. The source may block streaming or the file may be unavailable."
+                    }
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        playbackPosition = 0L
+                        playbackDuration = connected.duration.takeIf { it > 0 } ?: 0L
+                    }
+                })
+                pendingMediaItem?.let { item ->
+                    connected.setMediaItem(item)
+                    connected.prepare()
+                    connected.play()
+                    pendingMediaItem = null
+                }
+            } catch (_: Exception) {
+                playbackError = "The playback service could not be started. Please reopen the app."
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun startMediaItem(item: MediaItem) {
+        val activePlayer = player
+        if (activePlayer == null) {
+            pendingMediaItem = item
+            return
+        }
+        activePlayer.setMediaItem(item)
+        activePlayer.prepare()
+        activePlayer.play()
     }
 
     private fun startProgressUpdates() {
         progressJob = lifecycleScope.launch {
             while (true) {
-                if (::player.isInitialized) {
-                    playbackPosition = player.currentPosition.coerceAtLeast(0L)
-                    playbackDuration = player.duration.takeIf { it > 0 } ?: 0L
+                player?.let { activePlayer ->
+                    playbackPosition = activePlayer.currentPosition.coerceAtLeast(0L)
+                    playbackDuration = activePlayer.duration.takeIf { it > 0 } ?: 0L
                 }
                 delay(500)
             }
@@ -300,7 +338,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openDolbyAtmosSettings() {
         val effectIntent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
-            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player.audioSessionId)
+            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player?.audioSessionId ?: 0)
             putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
             putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
         }
@@ -382,7 +420,7 @@ class MainActivity : ComponentActivity() {
         lyricsRequestId++
         lyricsLoading = false
         lyricsText = null; syncedLyrics = ""; lyricsError = null
-        player.setMediaItem(MediaItem.fromUri(song.uri)); player.prepare(); player.play()
+        startMediaItem(MediaItem.Builder().setUri(song.uri).setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist).build()).build())
         // Automatically look up lyrics as soon as a new local track starts.
         findLyrics()
     }
@@ -396,7 +434,7 @@ class MainActivity : ComponentActivity() {
         lyricsRequestId++
         lyricsLoading = false
         lyricsText = null; syncedLyrics = ""; lyricsError = null
-        player.setMediaItem(MediaItem.fromUri(song.streamUrl)); player.prepare(); player.play()
+        startMediaItem(MediaItem.Builder().setUri(song.streamUrl).setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist).setArtworkUri(Uri.parse("https://archive.org/services/img/${Uri.encode(song.identifier)}")).build()).build())
         // Automatically look up lyrics as soon as a new online track starts.
         findLyrics()
     }
@@ -434,9 +472,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun togglePlayback() {
-        if (player.mediaItemCount == 0) {
+        val activePlayer = player ?: return
+        if (activePlayer.mediaItemCount == 0) {
             if (songs.isNotEmpty()) playLocalSong(songs.first())
-        } else if (player.isPlaying) player.pause() else player.play()
+        } else if (activePlayer.isPlaying) activePlayer.pause() else activePlayer.play()
     }
 
     private fun skipSong(next: Boolean) {
@@ -510,7 +549,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         progressJob?.cancel()
-        player.release()
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        player = null
         super.onDestroy()
     }
 }

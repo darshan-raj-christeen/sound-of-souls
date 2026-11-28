@@ -421,15 +421,21 @@ private fun SoundOfSoulsScreen(
     val fmt: (Long) -> String = { ms -> "%d:%02d".format(ms / 60000, (ms / 1000) % 60) }
     var showLyricsEditor by remember { mutableStateOf(false) }
     var lyricsDraft by remember { mutableStateOf("") }
+    // Curated from Tamil daily chart listings checked on 28 Nov 2026.
+    // These are official-source search shortcuts, not direct in-app streams.
     val trendingTamilSongs = listOf(
-        "Roddy Theme" to "Anirudh Ravichander",
-        "Veezha Veera" to "Sai Abhyankkar, Tippu & Arun Srinivasan",
-        "FA FA FA" to "Sai Abhyankkar & Thamizh Aadhavan",
-        "The Wild Theme" to "Sai Abhyankkar & Dhanush",
-        "Alaakaa Loova" to "Sai Abhyankkar & Rokesh",
-        "One Name" to "Anirudh Ravichander & Super Subu",
-        "Radhimaa" to "Sai Abhyankkar, Nargis Teji & Sai Smriti",
-        "Pavazha Malli" to "Sai Abhyankkar & Shruti Haasan"
+        "Roddy Theme" to "Anirudh Ravichander • Jailer 2",
+        "Jailer 2 Theme" to "Anirudh Ravichander, M.S Krsna & Super Subu",
+        "Veezha Veera" to "Sai Abhyankkar, Tippu & Arun Srinivasan • OM Chapter 1",
+        "Dileep Theme (Instrumental)" to "Anirudh Ravichander • Jailer 2",
+        "FA FA FA" to "Sai Abhyankkar & Thamizh Aadhavan • OM Chapter 1",
+        "One Sun One Moon" to "Anirudh Ravichander, Super Subu, M.S Krsna & HEISENBERG",
+        "One Name" to "Anirudh Ravichander & Super Subu • Jailer 2",
+        "Alaakaa Loova" to "Sai Abhyankkar & Rokesh • OM Chapter 1",
+        "Oorum Blood" to "Sai Abhyankkar, Paal Dabba, bebhumika & Deepthi Suresh",
+        "Ooroda Oththa Don" to "Sai Abhyankkar, Vangal Pulla Vicky, Thamizh Aadhavan & KK Nagar Gana Jeeva",
+        "Radhimaa" to "Sai Abhyankkar, Nargis Teji, Asma Teji & Vivek",
+        "Pavazha Malli" to "Sai Abhyankkar, Shruti Haasan & Vivek"
     )
 
     MaterialTheme(colorScheme = if (darkMode) darkColorScheme(primary = accent, surface = panel, background = bg)
@@ -603,7 +609,7 @@ private fun SoundOfSoulsScreen(
                                 Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp)) {
                                     Text("Trending Tamil songs", color = primaryText, fontSize = 18.sp,
                                         fontWeight = FontWeight.Bold)
-                                    Text("Updated 23 Nov 2026 • Tap a song to open its official music search",
+                                    Text("Chart snapshot: 28 Nov 2026 • Tap to find the official audio",
                                         color = secondaryText, fontSize = 11.sp)
                                 }
                             }

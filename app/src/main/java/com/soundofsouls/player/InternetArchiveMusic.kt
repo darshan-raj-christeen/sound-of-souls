@@ -143,45 +143,63 @@ object InternetArchiveMusic {
 
 /** Official Audius read-only catalogue and stream API integration. */
 object AudiusMusic {
+    private val apiHosts = listOf(
+        "https://api.audius.co/v1",
+        "https://discoveryprovider.audius.co/v1"
+    )
+
     fun search(query: String): List<OnlineSong> {
         val cleaned = query.trim()
         if (cleaned.isBlank()) return emptyList()
-        val address = "https://api.audius.co/v1/tracks/search?query=" +
-            URLEncoder.encode(cleaned, Charsets.UTF_8.name()) + "&limit=20&sort_method=popular"
-        val response = getAudiusJson(address)
-        val data = response.optJSONArray("data") ?: return emptyList()
-        val results = mutableListOf<OnlineSong>()
-        for (i in 0 until data.length()) {
-            val track = data.optJSONObject(i) ?: continue
-            val id = track.optString("id")
-            if (id.isBlank() || track.optBoolean("is_stream_gated", false)) continue
-            val title = track.optString("title").ifBlank { "Untitled track" }
-            val artist = track.optJSONObject("user")?.optString("name")
-                .orEmpty().ifBlank { "Audius artist" }
-            val artwork = track.optJSONObject("artwork")?.optString("150x150")
-                ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-            val stream = "https://api.audius.co/v1/tracks/" +
-                URLEncoder.encode(id, Charsets.UTF_8.name()) + "/stream"
-            results.add(OnlineSong(
-                identifier = "audius:$id",
-                title = title,
-                artist = artist,
-                streamUrl = stream,
-                licenseUrl = "Audius creator-uploaded track",
-                source = "Audius",
-                artworkUrl = artwork
-            ))
+
+        // Audius has multiple public discovery nodes. Try each node so a
+        // temporary outage or rate limit on one host does not empty discovery.
+        for (host in apiHosts) {
+            try {
+                val address = "$host/tracks/search?query=" +
+                    URLEncoder.encode(cleaned, Charsets.UTF_8.name()) +
+                    "&limit=20&sort_method=popular&app_name=SoundOfSouls"
+                val response = getAudiusJson(address)
+                val data = response.optJSONArray("data") ?: continue
+                val results = mutableListOf<OnlineSong>()
+                for (i in 0 until data.length()) {
+                    val track = data.optJSONObject(i) ?: continue
+                    val id = track.optString("id")
+                    if (id.isBlank() || track.optBoolean("is_stream_gated", false) ||
+                        track.optBoolean("is_download_gated", false)) continue
+                    val title = track.optString("title").ifBlank { "Untitled track" }
+                    val artist = track.optJSONObject("user")?.optString("name")
+                        .orEmpty().ifBlank { "Audius artist" }
+                    val artwork = track.optJSONObject("artwork")?.optString("150x150")
+                        ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                    val stream = "$host/tracks/" +
+                        URLEncoder.encode(id, Charsets.UTF_8.name()) +
+                        "/stream?app_name=SoundOfSouls"
+                    results.add(OnlineSong(
+                        identifier = "audius:$id",
+                        title = title,
+                        artist = artist,
+                        streamUrl = stream,
+                        licenseUrl = "Audius creator-uploaded track; see creator terms",
+                        source = "Audius",
+                        artworkUrl = artwork
+                    ))
+                }
+                if (results.isNotEmpty()) return results
+            } catch (_: Exception) {
+                // Try the next public Audius discovery node.
+            }
         }
-        return results
+        return emptyList()
     }
 
     private fun getAudiusJson(address: String): JSONObject {
         val connection = URL(address).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
-        connection.connectTimeout = 9000
-        connection.readTimeout = 15000
+        connection.connectTimeout = 10000
+        connection.readTimeout = 18000
         connection.setRequestProperty("Accept", "application/json")
-        connection.setRequestProperty("User-Agent", "SoundOfSouls/0.5 (Android music discovery)")
+        connection.setRequestProperty("User-Agent", "SoundOfSouls/0.6 (Android music discovery)")
         return try {
             if (connection.responseCode !in 200..299) {
                 throw IllegalStateException("Audius returned HTTP ${connection.responseCode}")

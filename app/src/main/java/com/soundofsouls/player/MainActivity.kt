@@ -400,9 +400,13 @@ class MainActivity : ComponentActivity() {
             isSearching = true
             searchError = null
             try {
-                val results = withContext(Dispatchers.IO) { InternetArchiveMusic.search(query, highQualityAudio) }
+                val results = withContext(Dispatchers.IO) {
+                    val audius = try { AudiusMusic.search(query) } catch (_: Exception) { emptyList() }
+                    val archive = try { InternetArchiveMusic.search(query, highQualityAudio) } catch (_: Exception) { emptyList() }
+                    audius + archive
+                }
                 onlineSongs = results
-                if (results.isEmpty()) searchError = "No open-licensed tracks found for “$query”. Try a different spelling or broader search."
+                if (results.isEmpty()) searchError = "No playable tracks found for “$query”. Try another spelling or check your connection."
             } catch (e: Exception) {
                 onlineSongs = emptyList()
                 searchError = "Search failed. Check your internet connection and tap refresh."
@@ -428,12 +432,12 @@ class MainActivity : ComponentActivity() {
         val index = onlineSongs.indexOfFirst { it.identifier == song.identifier }
         upNext = if (index >= 0) onlineSongs.drop(index + 1).map { it.title to it.artist } else emptyList()
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = true
-        loadOnlineArtwork(song.identifier)
+        loadOnlineArtwork(song.artworkUrl ?: "https://archive.org/services/img/${Uri.encode(song.identifier.removePrefix("archive:"))}")
         playbackError = null
         lyricsRequestId++
         lyricsLoading = false
         lyricsText = null; syncedLyrics = ""; lyricsError = null
-        startMediaItem(MediaItem.Builder().setUri(song.streamUrl).setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist).setArtworkUri(Uri.parse("https://archive.org/services/img/${Uri.encode(song.identifier)}")).build()).build())
+        startMediaItem(MediaItem.Builder().setUri(song.streamUrl).setMediaMetadata(MediaMetadata.Builder().setTitle(song.title).setArtist(song.artist).setArtworkUri(Uri.parse(song.artworkUrl ?: "https://archive.org/services/img/${Uri.encode(song.identifier.removePrefix("archive:"))}")).build()).build())
         // Automatically look up lyrics as soon as a new online track starts.
         findLyrics()
     }
@@ -453,12 +457,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun loadOnlineArtwork(identifier: String) {
+    private fun loadOnlineArtwork(artworkAddress: String) {
         artworkJob?.cancel()
         currentArtwork = null
         artworkJob = lifecycleScope.launch(Dispatchers.IO) {
             val bitmap = try {
-                val connection = URL("https://archive.org/services/img/${Uri.encode(identifier)}").openConnection() as HttpURLConnection
+                val connection = URL(artworkAddress).openConnection() as HttpURLConnection
                 connection.connectTimeout = 7000
                 connection.readTimeout = 7000
                 try {
@@ -990,11 +994,11 @@ private fun SoundOfSoulsScreen(
                                     onClick = { onTrendingSongClick("$title $artist") })
                             }
                             item {
-                                Text("Open-licensed tracks", color = primaryText, fontSize = 18.sp,
+                                Text("Online tracks", color = primaryText, fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
                             }
                             items(onlineSongs, key = { it.identifier + it.streamUrl }) { song ->
-                                SongRow(song.title, song.artist, "Open-licensed • Internet Archive", panel, primaryText, secondaryText, accent,
+                                SongRow(song.title, song.artist, song.source, panel, primaryText, secondaryText, accent,
                                     onClick = { onOnlineSongClick(song) })
                             }
                         }

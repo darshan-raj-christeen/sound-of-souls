@@ -115,7 +115,7 @@ object InternetArchiveMusic {
             is String -> creator
             else -> "Unknown artist"
         }
-        val streamUrl = "https://archive.org/download/${enc(identifier)}/${Uri.encode(fileName)}"
+        val streamUrl = "https://archive.org/download/${enc(identifier)}/${Uri.encode(fileName, "/")}"
         return OnlineSong(identifier, title, artist, streamUrl, license)
     }
 

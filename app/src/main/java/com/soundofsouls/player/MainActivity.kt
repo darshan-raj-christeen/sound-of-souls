@@ -55,6 +55,8 @@ class MainActivity : ComponentActivity() {
     private var builtInSongs by mutableStateOf(listOf<LocalSong>())
     private var importedSongs by mutableStateOf(listOf<LocalSong>())
     private var favouriteUris by mutableStateOf<Set<String>>(emptySet())
+    private var playlistNames by mutableStateOf<List<String>>(emptyList())
+    private var playlistSongs by mutableStateOf<Map<String, Set<String>>>(emptyMap())
     private var onlineSongs by mutableStateOf(listOf<OnlineSong>())
     private var currentSongTitle by mutableStateOf<String?>(null)
     private var currentSongArtist by mutableStateOf<String?>(null)
@@ -106,8 +108,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         highQualityAudio = getSharedPreferences("sound_of_souls_settings", MODE_PRIVATE)
             .getBoolean("high_quality_audio", false)
-        favouriteUris = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
-            .getStringSet("favourite_song_uris", emptySet())?.toSet() ?: emptySet()
+        val libraryPrefs = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
+        favouriteUris = libraryPrefs.getStringSet("favourite_song_uris", emptySet())?.toSet() ?: emptySet()
+        playlistNames = libraryPrefs.getStringSet("playlist_names", emptySet()).orEmpty().sorted()
+        playlistSongs = playlistNames.associateWith { name ->
+            libraryPrefs.getStringSet("playlist_items_$name", emptySet())?.toSet() ?: emptySet()
+        }
         player = ExoPlayer.Builder(this).build()
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
@@ -131,7 +137,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             SoundOfSoulsScreen(
                 songs = songs, builtInSongs = builtInSongs, onlineSongs = onlineSongs,
-                favouriteUris = favouriteUris,
+                favouriteUris = favouriteUris, playlistNames = playlistNames,
+                playlistSongs = playlistSongs,
                 featuredSongAvailable = builtInSongs.any { it.title.equals("Radhimaa", ignoreCase = true) },
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
                 isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
@@ -162,6 +169,22 @@ class MainActivity : ComponentActivity() {
                     favouriteUris = updated
                     getSharedPreferences("sound_of_souls_library", MODE_PRIVATE).edit()
                         .putStringSet("favourite_song_uris", updated).apply()
+                },
+                onCreatePlaylist = { name ->
+                    val cleanName = name.trim().take(40)
+                    if (cleanName.isNotBlank() && playlistNames.none { it.equals(cleanName, true) }) {
+                        playlistNames = (playlistNames + cleanName).sorted()
+                        playlistSongs = playlistSongs + (cleanName to emptySet())
+                        getSharedPreferences("sound_of_souls_library", MODE_PRIVATE).edit()
+                            .putStringSet("playlist_names", playlistNames.toSet())
+                            .putStringSet("playlist_items_$cleanName", emptySet()).apply()
+                    }
+                },
+                onAddToPlaylist = { song, playlist ->
+                    val updatedItems = (playlistSongs[playlist] ?: emptySet()) + song.uri.toString()
+                    playlistSongs = playlistSongs + (playlist to updatedItems)
+                    getSharedPreferences("sound_of_souls_library", MODE_PRIVATE).edit()
+                        .putStringSet("playlist_items_$playlist", updatedItems).apply()
                 },
                 onFeaturedSongClick = { builtInSongs.firstOrNull { it.title.equals("Radhimaa", ignoreCase = true) }?.let { playLocalSong(it) } },
                 onTrendingSongClick = { openTamilMusicCategory(it) },
@@ -412,8 +435,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SoundOfSoulsScreen(
     songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>,
-    favouriteUris: Set<String>, featuredSongAvailable: Boolean,
-    currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
+    favouriteUris: Set<String>, playlistNames: List<String>, playlistSongs: Map<String, Set<String>>,
+    featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
@@ -422,6 +445,7 @@ private fun SoundOfSoulsScreen(
     onAddMp3: () -> Unit,
     onThemeToggle: () -> Unit, onQualityToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
     onSongClick: (LocalSong) -> Unit, onToggleFavourite: (LocalSong) -> Unit,
+    onCreatePlaylist: (String) -> Unit, onAddToPlaylist: (LocalSong, String) -> Unit,
     onFeaturedSongClick: () -> Unit,
     onTrendingSongClick: (String) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
@@ -436,6 +460,10 @@ private fun SoundOfSoulsScreen(
     var showLyricsEditor by remember { mutableStateOf(false) }
     var lyricsDraft by remember { mutableStateOf("") }
     var showFavouritesOnly by remember { mutableStateOf(false) }
+    var selectedPlaylist by remember { mutableStateOf<String?>(null) }
+    var showCreatePlaylist by remember { mutableStateOf(false) }
+    var playlistNameDraft by remember { mutableStateOf("") }
+    var songToAddToPlaylist by remember { mutableStateOf<LocalSong?>(null) }
     // Curated from Tamil daily chart listings checked on 28 Nov 2026.
     // These are official-source search shortcuts, not direct in-app streams.
     val trendingTamilSongs = listOf(
@@ -655,18 +683,61 @@ private fun SoundOfSoulsScreen(
                                 Text("Add MP3")
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)) {
-                            FilterChip(selected = !showFavouritesOnly, onClick = { showFavouritesOnly = false }, label = { Text("All songs") })
-                            FilterChip(selected = showFavouritesOnly, onClick = { showFavouritesOnly = true },
-                                label = { Text("Favourites (${favouriteUris.size})") },
-                                leadingIcon = { Icon(Icons.Default.Favorite, null) })
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)) {
+                            FilterChip(selected = !showFavouritesOnly && selectedPlaylist == null,
+                                onClick = { showFavouritesOnly = false; selectedPlaylist = null }, label = { Text("All") })
+                            FilterChip(selected = showFavouritesOnly, onClick = { showFavouritesOnly = true; selectedPlaylist = null },
+                                label = { Text("Favourites") }, leadingIcon = { Icon(Icons.Default.Favorite, null) })
+                            IconButton(onClick = { playlistNameDraft = ""; showCreatePlaylist = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "Create playlist", tint = accent)
+                            }
+                        }
+                        if (playlistNames.isNotEmpty()) {
+                            LazyColumn(Modifier.heightIn(max = 52.dp)) {
+                                items(playlistNames) { name ->
+                                    FilterChip(selected = selectedPlaylist == name && !showFavouritesOnly,
+                                        onClick = { selectedPlaylist = name; showFavouritesOnly = false },
+                                        label = { Text("$name (${playlistSongs[name]?.size ?: 0})") })
+                                }
+                            }
+                        }
+                        if (showCreatePlaylist) {
+                            AlertDialog(onDismissRequest = { showCreatePlaylist = false },
+                                title = { Text("Create playlist") },
+                                text = { OutlinedTextField(value = playlistNameDraft, onValueChange = { playlistNameDraft = it },
+                                    singleLine = true, label = { Text("Playlist name") }) },
+                                confirmButton = { TextButton(onClick = { onCreatePlaylist(playlistNameDraft); showCreatePlaylist = false }) { Text("Create") } },
+                                dismissButton = { TextButton(onClick = { showCreatePlaylist = false }) { Text("Cancel") } })
+                        }
+                        if (songToAddToPlaylist != null) {
+                            AlertDialog(onDismissRequest = { songToAddToPlaylist = null },
+                                title = { Text("Add to playlist") },
+                                text = {
+                                    if (playlistNames.isEmpty()) Text("Create a playlist first using the + button.")
+                                    else Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        playlistNames.forEach { name ->
+                                            TextButton(onClick = { onAddToPlaylist(songToAddToPlaylist!!, name); songToAddToPlaylist = null }) {
+                                                Text(name)
+                                            }
+                                        }
+                                    }
+                                },
+                                confirmButton = { TextButton(onClick = { songToAddToPlaylist = null }) { Text("Close") } })
                         }
                         Text("Choose an audio file from your phone. MP3 files play directly in the app.",
                             color = secondaryText, fontSize = 11.sp, modifier = Modifier.padding(bottom = 10.dp))
-                        val visibleSongs = if (showFavouritesOnly) songs.filter { it.uri.toString() in favouriteUris } else songs
+                        val visibleSongs = when {
+                            showFavouritesOnly -> songs.filter { it.uri.toString() in favouriteUris }
+                            selectedPlaylist != null -> songs.filter { it.uri.toString() in (playlistSongs[selectedPlaylist] ?: emptySet()) }
+                            else -> songs
+                        }
                         if (visibleSongs.isEmpty()) {
-                            Text(if (showFavouritesOnly) "No favourites yet. Tap the heart on a song to save it here."
-                                else "No songs found yet. Add an MP3 or refresh your library.",
+                            Text(when {
+                                showFavouritesOnly -> "No favourites yet. Tap the heart on a song to save it here."
+                                selectedPlaylist != null -> "This playlist is empty. Use the playlist button beside a song to add tracks."
+                                else -> "No songs found yet. Add an MP3 or refresh your library."
+                            },
                                 color = secondaryText, fontSize = 13.sp, modifier = Modifier.padding(vertical = 18.dp))
                         } else {
                             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -674,7 +745,8 @@ private fun SoundOfSoulsScreen(
                                     SongRow(song.title, song.artist, "On this device", panel, primaryText, secondaryText, accent,
                                         onClick = { onSongClick(song) },
                                         isFavourite = song.uri.toString() in favouriteUris,
-                                        onFavouriteClick = { onToggleFavourite(song) })
+                                        onFavouriteClick = { onToggleFavourite(song) },
+                                        onPlaylistClick = { songToAddToPlaylist = song })
                                 }
                             }
                         }
@@ -725,7 +797,8 @@ private fun SoundOfSoulsScreen(
 @Composable
 private fun SongRow(title: String, artist: String, subtitle: String, panel: Color,
     primary: Color, secondary: Color, accent: Color, onClick: () -> Unit,
-    isFavourite: Boolean = false, onFavouriteClick: (() -> Unit)? = null) {
+    isFavourite: Boolean = false, onFavouriteClick: (() -> Unit)? = null,
+    onPlaylistClick: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().background(panel, RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(13.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Default.MusicNote, null, tint = accent, modifier = Modifier.size(30.dp))
@@ -733,6 +806,11 @@ private fun SongRow(title: String, artist: String, subtitle: String, panel: Colo
             Text(title, color = primary, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text(artist, color = secondary, fontSize = 12.sp, maxLines = 1)
             Text(subtitle, color = accent, fontSize = 10.sp)
+        }
+        if (onPlaylistClick != null) {
+            IconButton(onClick = onPlaylistClick) {
+                Icon(Icons.Default.PlaylistAdd, contentDescription = "Add to playlist", tint = primary)
+            }
         }
         if (onFavouriteClick != null) {
             IconButton(onClick = onFavouriteClick) {

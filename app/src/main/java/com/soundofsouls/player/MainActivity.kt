@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
     private var playlistNames by mutableStateOf<List<String>>(emptyList())
     private var playlistSongs by mutableStateOf<Map<String, Set<String>>>(emptyMap())
     private var onlineSongs by mutableStateOf(listOf<OnlineSong>())
+    private var upNext by mutableStateOf(listOf<Pair<String, String>>())
     private var currentSongTitle by mutableStateOf<String?>(null)
     private var currentSongArtist by mutableStateOf<String?>(null)
     private var currentSongIsOnline by mutableStateOf(false)
@@ -151,7 +152,7 @@ class MainActivity : ComponentActivity() {
                 playlistSongs = playlistSongs,
                 featuredSongAvailable = builtInSongs.any { it.title.equals("Radhimaa", ignoreCase = true) },
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
-                currentArtwork = currentArtwork,
+                currentArtwork = currentArtwork, upNext = upNext,
                 isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
                 isSearching = isSearching, searchError = searchError,
                 darkMode = darkMode, selectedTab = selectedTab, highQualityAudio = highQualityAudio,
@@ -340,6 +341,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playLocalSong(song: LocalSong) {
+        val index = songs.indexOfFirst { it.uri == song.uri }
+        upNext = if (index >= 0) songs.drop(index + 1).map { it.title to it.artist } else emptyList()
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = false
         loadLocalArtwork(song.uri)
         playbackError = null
@@ -352,6 +355,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun playOnlineSong(song: OnlineSong) {
+        val index = onlineSongs.indexOfFirst { it.identifier == song.identifier }
+        upNext = if (index >= 0) onlineSongs.drop(index + 1).map { it.title to it.artist } else emptyList()
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = true
         loadOnlineArtwork(song.identifier)
         playbackError = null
@@ -481,7 +486,7 @@ class MainActivity : ComponentActivity() {
 private fun SoundOfSoulsScreen(
     songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>,
     favouriteUris: Set<String>, playlistNames: List<String>, playlistSongs: Map<String, Set<String>>,
-    featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, currentArtwork: Bitmap?, isPlaying: Boolean, playbackError: String?,
+    featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, currentArtwork: Bitmap?, upNext: List<Pair<String, String>>, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
@@ -671,6 +676,28 @@ private fun SoundOfSoulsScreen(
                         IconButton(onClick = onNext, modifier = Modifier.size(54.dp)) {
                             Icon(Icons.Default.SkipNext, "Next", tint = primaryText, modifier = Modifier.size(34.dp))
                         }
+                    }
+                    if (upNext.isNotEmpty()) {
+                        Text("UP NEXT", color = secondaryText, fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
+                        LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 150.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            items(upNext.take(8)) { (title, artist) ->
+                                Row(Modifier.fillMaxWidth().background(panel, RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.QueueMusic, null, tint = accent, modifier = Modifier.size(20.dp))
+                                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                        Text(title, color = primaryText, fontSize = 13.sp, maxLines = 1)
+                                        Text(artist, color = secondaryText, fontSize = 11.sp, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text("No more songs in this queue", color = secondaryText, fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 8.dp))
                     }
                     Spacer(Modifier.weight(1f))
                 } else {

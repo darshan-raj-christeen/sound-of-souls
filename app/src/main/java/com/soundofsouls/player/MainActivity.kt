@@ -406,7 +406,7 @@ class MainActivity : ComponentActivity() {
                     audius + archive
                 }
                 onlineSongs = results
-                if (results.isEmpty()) searchError = "No playable tracks found for “$query”. Try another spelling or check your connection."
+                if (results.isEmpty()) searchError = "No matching playable tracks are available from Audius or the open-licensed archive for “$query”. Try a broader search or another artist. Commercial movie tracks may not be available in these catalogues."
             } catch (e: Exception) {
                 onlineSongs = emptyList()
                 searchError = "Search failed. Check your internet connection and tap refresh."

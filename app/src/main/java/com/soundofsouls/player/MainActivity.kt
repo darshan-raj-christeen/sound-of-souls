@@ -515,6 +515,7 @@ private fun SoundOfSoulsScreen(
     var playlistNameDraft by remember { mutableStateOf("") }
     var songToAddToPlaylist by remember { mutableStateOf<LocalSong?>(null) }
     var showNowPlaying by remember { mutableStateOf(false) }
+    var selectedCoverStyle by remember { mutableIntStateOf(0) }
     // Curated from Tamil daily chart listings checked on 28 Nov 2026.
     // These are official-source search shortcuts, not direct in-app streams.
     val trendingTamilSongs = listOf(
@@ -626,24 +627,88 @@ private fun SoundOfSoulsScreen(
                             Icon(Icons.Default.Lyrics, "Open lyrics", tint = accent)
                         }
                     }
-                    Spacer(Modifier.weight(1f))
+                    Text("COVER STYLE", color = secondaryText, fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp,
+                        modifier = Modifier.padding(start = 2.dp, bottom = 7.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()) {
+                        listOf("iPod", "Drip", "Spotify", "Mono").forEachIndexed { index, label ->
+                            FilterChip(selected = selectedCoverStyle == index,
+                                onClick = { selectedCoverStyle = index },
+                                label = { Text(label, fontSize = 10.sp) })
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
                     Box(
-                        Modifier.fillMaxWidth().aspectRatio(1f)
+                        Modifier.fillMaxWidth().aspectRatio(0.82f)
                             .background(
                                 androidx.compose.ui.graphics.Brush.linearGradient(
-                                    listOf(Color(0xFF58358C), Color(0xFF21152F), Color(0xFF100D19))
-                                ), RoundedCornerShape(28.dp)
-                            ),
+                                    when (selectedCoverStyle) {
+                                        1 -> listOf(Color(0xFF777777), Color(0xFF292929), Color(0xFF111111))
+                                        2 -> listOf(Color(0xFF071B17), Color(0xFF142B25), Color(0xFF050807))
+                                        3 -> listOf(Color(0xFFB8B8B8), Color(0xFF555555), Color(0xFF171717))
+                                        else -> listOf(Color(0xFF58358C), Color(0xFF21152F), Color(0xFF100D19))
+                                    }
+                                ), RoundedCornerShape(if (selectedCoverStyle == 1) 30.dp else 36.dp)
+                            ).padding(18.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (currentArtwork != null) {
-                            Image(bitmap = currentArtwork.asImageBitmap(), contentDescription = "Album artwork",
-                                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                        } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Album, null, tint = Color(0xFFE6D8FF), modifier = Modifier.size(132.dp))
-                                Text("SOUND OF SOULS", color = Color(0xFFD6BFFF), fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                        Column(
+                            Modifier.fillMaxSize()
+                                .background(
+                                    if (selectedCoverStyle == 1) Color(0xFF343434)
+                                    else if (selectedCoverStyle == 3) Color(0xFF252525)
+                                    else Color(0xFF17151D),
+                                    RoundedCornerShape(if (selectedCoverStyle == 1) 26.dp else 30.dp)
+                                ).padding(18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Text(
+                                when (selectedCoverStyle) {
+                                    0 -> "SOUND OF SOULS  •  NOW PLAYING"
+                                    1 -> "SOUND OF SOULS"
+                                    2 -> "YOUR MUSIC"
+                                    else -> "S O U N D  O F  S O U L S"
+                                },
+                                color = Color.White.copy(alpha = 0.78f), fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
+                            )
+                            Box(
+                                Modifier.fillMaxWidth().weight(1f)
+                                    .background(Color.Black, RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (currentArtwork != null) {
+                                    Image(bitmap = currentArtwork.asImageBitmap(),
+                                        contentDescription = "Album artwork",
+                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                } else {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.Album, null, tint = Color(0xFFE6D8FF),
+                                            modifier = Modifier.size(82.dp))
+                                        Text("SOUND OF SOULS", color = Color(0xFFD6BFFF),
+                                            fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                            letterSpacing = 2.sp)
+                                    }
+                                }
+                            }
+                            Text(currentSongTitle ?: "No song selected", color = Color.White,
+                                fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(currentSongArtist ?: "", color = Color.White.copy(alpha = 0.68f),
+                                fontSize = 10.sp, maxLines = 1)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.SkipPrevious, null, tint = Color.White,
+                                    modifier = Modifier.size(22.dp))
+                                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    null, tint = Color.White, modifier = Modifier.size(30.dp))
+                                Icon(Icons.Default.SkipNext, null, tint = Color.White,
+                                    modifier = Modifier.size(22.dp))
+                            }
+                            if (selectedCoverStyle == 0 || selectedCoverStyle == 2) {
+                                Text("●  ━━━━━━━━━━━━━━━━━  ◉", color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 9.sp)
                             }
                         }
                     }

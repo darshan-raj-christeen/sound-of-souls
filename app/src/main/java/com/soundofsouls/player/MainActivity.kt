@@ -124,7 +124,6 @@ class MainActivity : ComponentActivity() {
         highQualityAudio = settingsPrefs.getBoolean("high_quality_audio", false)
         shuffleEnabled = settingsPrefs.getBoolean("shuffle_enabled", false)
         repeatMode = settingsPrefs.getInt("repeat_mode", Player.REPEAT_MODE_OFF)
-        playbackSpeed = settingsPrefs.getFloat("playback_speed", 1.0f)
         val libraryPrefs = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
         favouriteUris = libraryPrefs.getStringSet("favourite_song_uris", emptySet())?.toSet() ?: emptySet()
         playlistNames = libraryPrefs.getStringSet("playlist_names", emptySet()).orEmpty().sorted()
@@ -240,7 +239,6 @@ class MainActivity : ComponentActivity() {
                         else -> 1.0f
                     }
                     player.setPlaybackSpeed(playbackSpeed)
-                    settingsPrefs.edit().putFloat("playback_speed", playbackSpeed).apply()
                 }
             )
         }

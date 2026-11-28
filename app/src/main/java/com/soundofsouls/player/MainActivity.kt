@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private var songs by mutableStateOf(listOf<LocalSong>())
     private var builtInSongs by mutableStateOf(listOf<LocalSong>())
     private var importedSongs by mutableStateOf(listOf<LocalSong>())
+    private var favouriteUris by mutableStateOf<Set<String>>(emptySet())
     private var onlineSongs by mutableStateOf(listOf<OnlineSong>())
     private var currentSongTitle by mutableStateOf<String?>(null)
     private var currentSongArtist by mutableStateOf<String?>(null)
@@ -105,6 +106,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         highQualityAudio = getSharedPreferences("sound_of_souls_settings", MODE_PRIVATE)
             .getBoolean("high_quality_audio", false)
+        favouriteUris = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
+            .getStringSet("favourite_song_uris", emptySet())?.toSet() ?: emptySet()
         player = ExoPlayer.Builder(this).build()
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
@@ -128,6 +131,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             SoundOfSoulsScreen(
                 songs = songs, builtInSongs = builtInSongs, onlineSongs = onlineSongs,
+                favouriteUris = favouriteUris,
                 featuredSongAvailable = builtInSongs.any { it.title.equals("Radhimaa", ignoreCase = true) },
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
                 isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
@@ -151,6 +155,14 @@ class MainActivity : ComponentActivity() {
                 onDolbyAtmosClick = { openDolbyAtmosSettings() },
                 onTabChange = { selectedTab = it },
                 onSongClick = { playLocalSong(it) },
+                onToggleFavourite = { song ->
+                    val uri = song.uri.toString()
+                    val updated = favouriteUris.toMutableSet()
+                    if (!updated.add(uri)) updated.remove(uri)
+                    favouriteUris = updated
+                    getSharedPreferences("sound_of_souls_library", MODE_PRIVATE).edit()
+                        .putStringSet("favourite_song_uris", updated).apply()
+                },
                 onFeaturedSongClick = { builtInSongs.firstOrNull { it.title.equals("Radhimaa", ignoreCase = true) }?.let { playLocalSong(it) } },
                 onTrendingSongClick = { openTamilMusicCategory(it) },
                 onOnlineSongClick = { playOnlineSong(it) },
@@ -399,7 +411,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun SoundOfSoulsScreen(
-    songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>, featuredSongAvailable: Boolean,
+    songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>,
+    favouriteUris: Set<String>, featuredSongAvailable: Boolean,
     currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
@@ -408,7 +421,8 @@ private fun SoundOfSoulsScreen(
     onSearchQueryChange: (String) -> Unit, onSearch: () -> Unit, onRefresh: () -> Unit,
     onAddMp3: () -> Unit,
     onThemeToggle: () -> Unit, onQualityToggle: () -> Unit, onDolbyAtmosClick: () -> Unit, onTabChange: (AppTab) -> Unit,
-    onSongClick: (LocalSong) -> Unit, onFeaturedSongClick: () -> Unit,
+    onSongClick: (LocalSong) -> Unit, onToggleFavourite: (LocalSong) -> Unit,
+    onFeaturedSongClick: () -> Unit,
     onTrendingSongClick: (String) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
     onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit
@@ -421,6 +435,7 @@ private fun SoundOfSoulsScreen(
     val fmt: (Long) -> String = { ms -> "%d:%02d".format(ms / 60000, (ms / 1000) % 60) }
     var showLyricsEditor by remember { mutableStateOf(false) }
     var lyricsDraft by remember { mutableStateOf("") }
+    var showFavouritesOnly by remember { mutableStateOf(false) }
     // Curated from Tamil daily chart listings checked on 28 Nov 2026.
     // These are official-source search shortcuts, not direct in-app streams.
     val trendingTamilSongs = listOf(
@@ -640,11 +655,27 @@ private fun SoundOfSoulsScreen(
                                 Text("Add MP3")
                             }
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp, bottom = 8.dp)) {
+                            FilterChip(selected = !showFavouritesOnly, onClick = { showFavouritesOnly = false }, label = { Text("All songs") })
+                            FilterChip(selected = showFavouritesOnly, onClick = { showFavouritesOnly = true },
+                                label = { Text("Favourites (${favouriteUris.size})") },
+                                leadingIcon = { Icon(Icons.Default.Favorite, null) })
+                        }
                         Text("Choose an audio file from your phone. MP3 files play directly in the app.",
-                            color = secondaryText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
-                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(songs, key = { it.id }) { song ->
-                                SongRow(song.title, song.artist, "On this device", panel, primaryText, secondaryText, accent) { onSongClick(song) }
+                            color = secondaryText, fontSize = 11.sp, modifier = Modifier.padding(bottom = 10.dp))
+                        val visibleSongs = if (showFavouritesOnly) songs.filter { it.uri.toString() in favouriteUris } else songs
+                        if (visibleSongs.isEmpty()) {
+                            Text(if (showFavouritesOnly) "No favourites yet. Tap the heart on a song to save it here."
+                                else "No songs found yet. Add an MP3 or refresh your library.",
+                                color = secondaryText, fontSize = 13.sp, modifier = Modifier.padding(vertical = 18.dp))
+                        } else {
+                            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(visibleSongs, key = { it.id }) { song ->
+                                    SongRow(song.title, song.artist, "On this device", panel, primaryText, secondaryText, accent,
+                                        onClick = { onSongClick(song) },
+                                        isFavourite = song.uri.toString() in favouriteUris,
+                                        onFavouriteClick = { onToggleFavourite(song) })
+                                }
                             }
                         }
                     }
@@ -693,7 +724,8 @@ private fun SoundOfSoulsScreen(
 
 @Composable
 private fun SongRow(title: String, artist: String, subtitle: String, panel: Color,
-    primary: Color, secondary: Color, accent: Color, onClick: () -> Unit) {
+    primary: Color, secondary: Color, accent: Color, onClick: () -> Unit,
+    isFavourite: Boolean = false, onFavouriteClick: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().background(panel, RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(13.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Default.MusicNote, null, tint = accent, modifier = Modifier.size(30.dp))
@@ -701,6 +733,13 @@ private fun SongRow(title: String, artist: String, subtitle: String, panel: Colo
             Text(title, color = primary, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text(artist, color = secondary, fontSize = 12.sp, maxLines = 1)
             Text(subtitle, color = accent, fontSize = 10.sp)
+        }
+        if (onFavouriteClick != null) {
+            IconButton(onClick = onFavouriteClick) {
+                Icon(if (isFavourite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isFavourite) "Remove from favourites" else "Add to favourites",
+                    tint = if (isFavourite) Color(0xFFE879A9) else primary)
+            }
         }
         Icon(Icons.Default.PlayArrow, "Play $title", tint = primary)
     }

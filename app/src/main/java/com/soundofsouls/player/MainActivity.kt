@@ -370,13 +370,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openTamilMusicCategory(query: String) {
-        val musicUri = Uri.parse("https://music.youtube.com/search?q=${Uri.encode(query)}")
-        try { startActivity(Intent(Intent.ACTION_VIEW, musicUri)) }
-        catch (_: Exception) {
-            val youtubeUri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
-            try { startActivity(Intent(Intent.ACTION_VIEW, youtubeUri)) }
-            catch (_: Exception) { playbackError = "Could not open the official music search." }
-        }
+        // Keep discovery inside Sound of Souls so this ad-free app does not
+        // send listeners to an external service that may insert advertisements.
+        selectedTab = AppTab.ONLINE
+        searchQuery = query
+        searchOnlineMusic()
     }
 
     private fun openMyYouTubeSong() {
@@ -925,9 +923,17 @@ private fun SoundOfSoulsScreen(
                             }
                             Spacer(Modifier.height(12.dp))
                         }
-                        Text("MP3 music discovery", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("Play audio files directly inside Sound of Souls. Only reusable, open-licensed tracks are shown here.",
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 6.dp)) {
+                            Icon(Icons.Default.Block, contentDescription = null, tint = Color(0xFF7DD9A5),
+                                modifier = Modifier.size(17.dp))
+                            Text("AD-FREE LISTENING", color = Color(0xFF7DD9A5), fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp,
+                                modifier = Modifier.padding(start = 6.dp))
+                        }
+                        Text("No ads or ad SDKs are built into Sound of Souls. Online playback uses reusable, open-licensed audio directly in the app. External music services may show their own ads, so trending searches stay inside this app.",
                             color = secondaryText, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+                        Text("MP3 music discovery", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text("Find your next favourite", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                         Text(if (highQualityAudio) "High quality preference: lossless files first when available" else "Search open-licensed music you can stream", color = secondaryText, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))

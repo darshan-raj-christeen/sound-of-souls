@@ -609,9 +609,8 @@ private fun SoundOfSoulsScreen(
                             Text("Sound of Souls", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 6.dp))
                             soundOfSoulsTracks.forEach { track ->
-                                SongRow(track.title, track.artist, "Built-in song • Offline playback", panel, primaryText, secondaryText, accent) {
-                                    onSongClick(track)
-                                }
+                                SongRow(track.title, track.artist, "Built-in song • Offline playback", panel, primaryText, secondaryText, accent,
+                                    onClick = { onSongClick(track) })
                             }
                             Spacer(Modifier.height(12.dp))
                         }
@@ -619,9 +618,8 @@ private fun SoundOfSoulsScreen(
                             Text("Other Artists", color = primaryText, fontSize = 18.sp, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 6.dp))
                             otherArtistTracks.forEach { track ->
-                                SongRow(track.title, track.artist, "Other artists • Offline playback", panel, primaryText, secondaryText, accent) {
-                                    onSongClick(track)
-                                }
+                                SongRow(track.title, track.artist, "Other artists • Offline playback", panel, primaryText, secondaryText, accent,
+                                    onClick = { onSongClick(track) })
                             }
                             Spacer(Modifier.height(12.dp))
                         }
@@ -657,18 +655,16 @@ private fun SoundOfSoulsScreen(
                                 }
                             }
                             items(trendingTamilSongs, key = { it.first }) { (title, artist) ->
-                                SongRow(title, artist, "Trending • Open in YouTube Music", panel, primaryText, secondaryText, accent) {
-                                    onTrendingSongClick("$title $artist")
-                                }
+                                SongRow(title, artist, "Trending • Open in YouTube Music", panel, primaryText, secondaryText, accent,
+                                    onClick = { onTrendingSongClick("$title $artist") })
                             }
                             item {
                                 Text("Open-licensed tracks", color = primaryText, fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
                             }
                             items(onlineSongs, key = { it.identifier + it.streamUrl }) { song ->
-                                SongRow(song.title, song.artist, "Open-licensed • Internet Archive", panel, primaryText, secondaryText, accent) {
-                                    onOnlineSongClick(song)
-                                }
+                                SongRow(song.title, song.artist, "Open-licensed • Internet Archive", panel, primaryText, secondaryText, accent,
+                                    onClick = { onOnlineSongClick(song) })
                             }
                         }
                     } else {

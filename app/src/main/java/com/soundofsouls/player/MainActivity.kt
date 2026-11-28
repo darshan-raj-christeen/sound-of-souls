@@ -1,6 +1,11 @@
 package com.soundofsouls.player
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import java.net.HttpURLConnection
+import java.net.URL
 import android.content.ContentUris
 import android.content.Intent
 import android.media.audiofx.AudioEffect
@@ -14,6 +19,7 @@ import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,6 +35,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -61,6 +69,8 @@ class MainActivity : ComponentActivity() {
     private var currentSongTitle by mutableStateOf<String?>(null)
     private var currentSongArtist by mutableStateOf<String?>(null)
     private var currentSongIsOnline by mutableStateOf(false)
+    private var currentArtwork by mutableStateOf<Bitmap?>(null)
+    private var artworkJob: Job? = null
     private var isPlaying by mutableStateOf(false)
     private var playbackError by mutableStateOf<String?>(null)
     private var searchQuery by mutableStateOf("")
@@ -141,6 +151,7 @@ class MainActivity : ComponentActivity() {
                 playlistSongs = playlistSongs,
                 featuredSongAvailable = builtInSongs.any { it.title.equals("Radhimaa", ignoreCase = true) },
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
+                currentArtwork = currentArtwork,
                 isPlaying = isPlaying, playbackError = playbackError, searchQuery = searchQuery,
                 isSearching = isSearching, searchError = searchError,
                 darkMode = darkMode, selectedTab = selectedTab, highQualityAudio = highQualityAudio,
@@ -330,6 +341,7 @@ class MainActivity : ComponentActivity() {
 
     private fun playLocalSong(song: LocalSong) {
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = false
+        loadLocalArtwork(song.uri)
         playbackError = null
         lyricsRequestId++
         lyricsLoading = false
@@ -341,6 +353,7 @@ class MainActivity : ComponentActivity() {
 
     private fun playOnlineSong(song: OnlineSong) {
         currentSongTitle = song.title; currentSongArtist = song.artist; currentSongIsOnline = true
+        loadOnlineArtwork(song.identifier)
         playbackError = null
         lyricsRequestId++
         lyricsLoading = false
@@ -348,6 +361,38 @@ class MainActivity : ComponentActivity() {
         player.setMediaItem(MediaItem.fromUri(song.streamUrl)); player.prepare(); player.play()
         // Automatically look up lyrics as soon as a new online track starts.
         findLyrics()
+    }
+
+    private fun loadLocalArtwork(uri: Uri) {
+        artworkJob?.cancel()
+        currentArtwork = null
+        artworkJob = lifecycleScope.launch(Dispatchers.IO) {
+            val bitmap = try {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(this@MainActivity, uri)
+                    retriever.embeddedPicture?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                } finally { retriever.release() }
+            } catch (_: Exception) { null }
+            withContext(Dispatchers.Main) { currentArtwork = bitmap }
+        }
+    }
+
+    private fun loadOnlineArtwork(identifier: String) {
+        artworkJob?.cancel()
+        currentArtwork = null
+        artworkJob = lifecycleScope.launch(Dispatchers.IO) {
+            val bitmap = try {
+                val connection = URL("https://archive.org/services/img/${Uri.encode(identifier)}").openConnection() as HttpURLConnection
+                connection.connectTimeout = 7000
+                connection.readTimeout = 7000
+                try {
+                    if (connection.responseCode in 200..299) connection.inputStream.use { BitmapFactory.decodeStream(it) }
+                    else null
+                } finally { connection.disconnect() }
+            } catch (_: Exception) { null }
+            withContext(Dispatchers.Main) { currentArtwork = bitmap }
+        }
     }
 
     private fun togglePlayback() {
@@ -436,7 +481,7 @@ class MainActivity : ComponentActivity() {
 private fun SoundOfSoulsScreen(
     songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>,
     favouriteUris: Set<String>, playlistNames: List<String>, playlistSongs: Map<String, Set<String>>,
-    featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, isPlaying: Boolean, playbackError: String?,
+    featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, currentArtwork: Bitmap?, isPlaying: Boolean, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
@@ -586,10 +631,15 @@ private fun SoundOfSoulsScreen(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Album, null, tint = Color(0xFFE6D8FF), modifier = Modifier.size(132.dp))
-                            Text("SOUND OF SOULS", color = Color(0xFFD6BFFF), fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                        if (currentArtwork != null) {
+                            Image(bitmap = currentArtwork.asImageBitmap(), contentDescription = "Album artwork",
+                                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Album, null, tint = Color(0xFFE6D8FF), modifier = Modifier.size(132.dp))
+                                Text("SOUND OF SOULS", color = Color(0xFFD6BFFF), fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                            }
                         }
                     }
                     Spacer(Modifier.height(28.dp))
@@ -811,7 +861,12 @@ private fun SoundOfSoulsScreen(
                     Column(Modifier.fillMaxWidth().background(panel, RoundedCornerShape(18.dp))
                         .clickable { showNowPlaying = true }.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Album, null, tint = accent, modifier = Modifier.size(36.dp))
+                            if (currentArtwork != null) {
+                                Image(bitmap = currentArtwork.asImageBitmap(), contentDescription = "Album artwork",
+                                    modifier = Modifier.size(42.dp), contentScale = ContentScale.Crop)
+                            } else {
+                                Icon(Icons.Default.Album, null, tint = accent, modifier = Modifier.size(36.dp))
+                            }
                             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                                 Text(currentSongTitle, color = primaryText, fontWeight = FontWeight.Bold, maxLines = 1)
                                 Text(currentSongArtist ?: "", color = secondaryText, fontSize = 12.sp, maxLines = 1)

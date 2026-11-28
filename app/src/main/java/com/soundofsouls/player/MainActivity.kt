@@ -23,6 +23,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -610,7 +612,8 @@ private fun SoundOfSoulsScreen(
     MaterialTheme(colorScheme = if (darkMode) darkColorScheme(primary = accent, surface = panel, background = bg)
         else lightColorScheme(primary = accent, surface = panel, background = bg)) {
         Surface(Modifier.fillMaxSize(), color = bg) {
-            Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp)) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp)
+                .then(if (showNowPlaying || showLyrics) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -714,7 +717,7 @@ private fun SoundOfSoulsScreen(
                     }
                     Spacer(Modifier.height(10.dp))
                     Box(
-                        Modifier.fillMaxWidth().aspectRatio(0.82f)
+                        Modifier.fillMaxWidth().heightIn(max = 390.dp).aspectRatio(1f)
                             .background(
                                 androidx.compose.ui.graphics.Brush.linearGradient(
                                     when (selectedCoverStyle) {
@@ -786,7 +789,7 @@ private fun SoundOfSoulsScreen(
                             }
                         }
                     }
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(16.dp))
                     Text(currentSongTitle ?: "No song selected", color = primaryText,
                         fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     Text(currentSongArtist ?: "", color = secondaryText, fontSize = 15.sp,

@@ -464,6 +464,7 @@ private fun SoundOfSoulsScreen(
     var showCreatePlaylist by remember { mutableStateOf(false) }
     var playlistNameDraft by remember { mutableStateOf("") }
     var songToAddToPlaylist by remember { mutableStateOf<LocalSong?>(null) }
+    var showNowPlaying by remember { mutableStateOf(false) }
     // Curated from Tamil daily chart listings checked on 28 Nov 2026.
     // These are official-source search shortcuts, not direct in-app streams.
     val trendingTamilSongs = listOf(
@@ -564,6 +565,64 @@ private fun SoundOfSoulsScreen(
                         }
                         else -> Text("Lyrics will appear here.", color = secondaryText)
                     }
+                } else if (showNowPlaying) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
+                        IconButton(onClick = { showNowPlaying = false }) {
+                            Icon(Icons.Default.ArrowBack, "Back", tint = primaryText)
+                        }
+                        Text("NOW PLAYING", color = primaryText, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = onLyricsClick) {
+                            Icon(Icons.Default.Lyrics, "Open lyrics", tint = accent)
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Box(
+                        Modifier.fillMaxWidth().aspectRatio(1f)
+                            .background(
+                                androidx.compose.ui.graphics.Brush.linearGradient(
+                                    listOf(Color(0xFF58358C), Color(0xFF21152F), Color(0xFF100D19))
+                                ), RoundedCornerShape(28.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Album, null, tint = Color(0xFFE6D8FF), modifier = Modifier.size(132.dp))
+                            Text("SOUND OF SOULS", color = Color(0xFFD6BFFF), fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(28.dp))
+                    Text(currentSongTitle ?: "No song selected", color = primaryText,
+                        fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(currentSongArtist ?: "", color = secondaryText, fontSize = 15.sp,
+                        modifier = Modifier.padding(top = 5.dp), maxLines = 1)
+                    if (playbackError != null) {
+                        Text(playbackError, color = Color(0xFFE57373), fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 8.dp))
+                    }
+                    Spacer(Modifier.height(18.dp))
+                    Slider(value = if (playbackDuration > 0) playbackPosition.coerceIn(0, playbackDuration).toFloat() else 0f,
+                        onValueChange = { onSeek(it.toLong()) },
+                        valueRange = 0f..(playbackDuration.coerceAtLeast(1L).toFloat()))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(fmt(playbackPosition), color = secondaryText, fontSize = 11.sp)
+                        Text(fmt(playbackDuration), color = secondaryText, fontSize = 11.sp)
+                    }
+                    Row(Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onPrevious, modifier = Modifier.size(54.dp)) {
+                            Icon(Icons.Default.SkipPrevious, "Previous", tint = primaryText, modifier = Modifier.size(34.dp))
+                        }
+                        IconButton(onClick = onPlayPause, modifier = Modifier.size(76.dp)) {
+                            Icon(if (isPlaying) Icons.Default.PauseCircleFilled else Icons.Default.PlayCircleFilled,
+                                if (isPlaying) "Pause" else "Play", tint = accent, modifier = Modifier.size(70.dp))
+                        }
+                        IconButton(onClick = onNext, modifier = Modifier.size(54.dp)) {
+                            Icon(Icons.Default.SkipNext, "Next", tint = primaryText, modifier = Modifier.size(34.dp))
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 14.dp, bottom = 12.dp)) {
                         FilterChip(selected = selectedTab == AppTab.ONLINE, onClick = { onTabChange(AppTab.ONLINE) },
@@ -748,8 +807,9 @@ private fun SoundOfSoulsScreen(
                         }
                     }
                 }
-                if (currentSongTitle != null) {
-                    Column(Modifier.fillMaxWidth().background(panel, RoundedCornerShape(18.dp)).padding(12.dp)) {
+                if (currentSongTitle != null && !showNowPlaying) {
+                    Column(Modifier.fillMaxWidth().background(panel, RoundedCornerShape(18.dp))
+                        .clickable { showNowPlaying = true }.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Album, null, tint = accent, modifier = Modifier.size(36.dp))
                             Column(Modifier.weight(1f).padding(start = 10.dp)) {

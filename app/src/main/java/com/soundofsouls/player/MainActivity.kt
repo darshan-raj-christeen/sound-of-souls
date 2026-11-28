@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private var isPlaying by mutableStateOf(false)
     private var shuffleEnabled by mutableStateOf(false)
     private var repeatMode by mutableIntStateOf(Player.REPEAT_MODE_OFF)
+    private var playbackSpeed by mutableFloatStateOf(1.0f)
     private var playbackError by mutableStateOf<String?>(null)
     private var searchQuery by mutableStateOf("")
     private var isSearching by mutableStateOf(false)
@@ -123,6 +124,7 @@ class MainActivity : ComponentActivity() {
         highQualityAudio = settingsPrefs.getBoolean("high_quality_audio", false)
         shuffleEnabled = settingsPrefs.getBoolean("shuffle_enabled", false)
         repeatMode = settingsPrefs.getInt("repeat_mode", Player.REPEAT_MODE_OFF)
+        playbackSpeed = settingsPrefs.getFloat("playback_speed", 1.0f)
         val libraryPrefs = getSharedPreferences("sound_of_souls_library", MODE_PRIVATE)
         favouriteUris = libraryPrefs.getStringSet("favourite_song_uris", emptySet())?.toSet() ?: emptySet()
         playlistNames = libraryPrefs.getStringSet("playlist_names", emptySet()).orEmpty().sorted()
@@ -132,6 +134,7 @@ class MainActivity : ComponentActivity() {
         player = ExoPlayer.Builder(this).build()
         player.shuffleModeEnabled = shuffleEnabled
         player.repeatMode = repeatMode
+        player.setPlaybackSpeed(playbackSpeed)
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlaybackStateChanged(state: Int) {
@@ -160,6 +163,7 @@ class MainActivity : ComponentActivity() {
                 currentSongTitle = currentSongTitle, currentSongArtist = currentSongArtist,
                 currentArtwork = currentArtwork, upNext = upNext,
                 isPlaying = isPlaying, shuffleEnabled = shuffleEnabled, repeatMode = repeatMode,
+                playbackSpeed = playbackSpeed,
                 playbackError = playbackError, searchQuery = searchQuery,
                 isSearching = isSearching, searchError = searchError,
                 darkMode = darkMode, selectedTab = selectedTab, highQualityAudio = highQualityAudio,
@@ -227,6 +231,16 @@ class MainActivity : ComponentActivity() {
                     }
                     player.repeatMode = repeatMode
                     settingsPrefs.edit().putInt("repeat_mode", repeatMode).apply()
+                },
+                onPlaybackSpeedCycle = {
+                    playbackSpeed = when (playbackSpeed) {
+                        1.0f -> 1.25f
+                        1.25f -> 1.5f
+                        1.5f -> 2.0f
+                        else -> 1.0f
+                    }
+                    player.setPlaybackSpeed(playbackSpeed)
+                    settingsPrefs.edit().putFloat("playback_speed", playbackSpeed).apply()
                 }
             )
         }
@@ -508,7 +522,7 @@ private fun SoundOfSoulsScreen(
     songs: List<LocalSong>, builtInSongs: List<LocalSong>, onlineSongs: List<OnlineSong>,
     favouriteUris: Set<String>, playlistNames: List<String>, playlistSongs: Map<String, Set<String>>,
     featuredSongAvailable: Boolean, currentSongTitle: String?, currentSongArtist: String?, currentArtwork: Bitmap?, upNext: List<Pair<String, String>>, isPlaying: Boolean,
-    shuffleEnabled: Boolean, repeatMode: Int, playbackError: String?,
+    shuffleEnabled: Boolean, repeatMode: Int, playbackSpeed: Float, playbackError: String?,
     searchQuery: String, isSearching: Boolean, searchError: String?,
     darkMode: Boolean, selectedTab: AppTab, highQualityAudio: Boolean, showLyrics: Boolean,
     lyricsText: String?, syncedLyrics: String, lyricsLoading: Boolean, lyricsError: String?,
@@ -522,7 +536,7 @@ private fun SoundOfSoulsScreen(
     onTrendingSongClick: (String) -> Unit, onOnlineSongClick: (OnlineSong) -> Unit,
     onPlayPause: () -> Unit, onLyricsClick: () -> Unit, onLyricsBack: () -> Unit,
     onSaveLyrics: (String) -> Unit, onSeek: (Long) -> Unit, onNext: () -> Unit, onPrevious: () -> Unit,
-    onShuffleToggle: () -> Unit, onRepeatCycle: () -> Unit
+    onShuffleToggle: () -> Unit, onRepeatCycle: () -> Unit, onPlaybackSpeedCycle: () -> Unit
 ) {
     val bg = if (darkMode) Color(0xFF090711) else Color(0xFFF5F2FA)
     val panel = if (darkMode) Color(0xFF211D30) else Color(0xFFFFFFFF)
@@ -783,6 +797,11 @@ private fun SoundOfSoulsScreen(
                             Player.REPEAT_MODE_ALL -> "Repeat all"
                             else -> "Repeat off"
                         }, color = if (repeatMode != Player.REPEAT_MODE_OFF) accent else secondaryText, fontSize = 11.sp)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        FilterChip(selected = playbackSpeed != 1.0f, onClick = onPlaybackSpeedCycle,
+                            label = { Text("Playback speed  ${playbackSpeed}x", fontSize = 11.sp) },
+                            leadingIcon = { Icon(Icons.Default.Speed, null, modifier = Modifier.size(16.dp)) })
                     }
                     if (upNext.isNotEmpty()) {
                         Text("UP NEXT", color = secondaryText, fontSize = 11.sp,

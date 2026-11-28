@@ -931,6 +931,29 @@ private fun SoundOfSoulsScreen(
                         Text("Find your next favourite", color = primaryText, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                         Text(if (highQualityAudio) "High quality preference: lossless files first when available" else "Search open-licensed music you can stream", color = secondaryText, fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp, bottom = 10.dp))
+                        Text("BROWSE BY STYLE", color = secondaryText, fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp,
+                            modifier = Modifier.padding(bottom = 5.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            listOf(
+                                listOf("Tamil", "Instrumental", "Lo-fi"),
+                                listOf("Devotional", "Classical", "Electronic")
+                            ).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    row.forEach { style ->
+                                        FilterChip(
+                                            selected = searchQuery.equals(style, ignoreCase = true),
+                                            onClick = {
+                                                onSearchQueryChange("$style music")
+                                                onSearch()
+                                            },
+                                            label = { Text(style, fontSize = 11.sp) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
                         OutlinedTextField(
                             value = searchQuery, onValueChange = onSearchQueryChange,
                             modifier = Modifier.fillMaxWidth(), singleLine = true,

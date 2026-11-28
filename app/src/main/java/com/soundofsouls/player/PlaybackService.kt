@@ -1,5 +1,6 @@
 package com.soundofsouls.player
 
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -14,8 +15,10 @@ class PlaybackService : MediaSessionService() {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("SoundOfSouls/0.4 (Android)")
             .setAllowCrossProtocolRedirects(true)
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(httpDataSourceFactory)
+        // DefaultDataSource supports local content:// and file:// URIs as well as HTTP streams.
+        // DefaultHttpDataSource alone cannot read songs selected from device storage.
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()

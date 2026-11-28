@@ -231,7 +231,6 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
-        connectToPlaybackService()
     }
 
     private fun connectToPlaybackService() {
@@ -338,7 +337,7 @@ class MainActivity : ComponentActivity() {
 
     private fun openDolbyAtmosSettings() {
         val effectIntent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
-            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, player?.audioSessionId ?: 0)
+            putExtra(AudioEffect.EXTRA_AUDIO_SESSION, 0)
             putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
             putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
         }
